@@ -1,24 +1,25 @@
 # mirror (backend)
 
-Gathers everything one person's mirror shows: their enabled widgets, where they placed them,
-and each widget's data from d3l (Brightspace) and the weather service. The mirror page
-([`frontends/mirror`](../../frontends/mirror/README.md)) makes one request and draws the result.
+Works out who's at the mirror and gathers everything their mirror shows: their enabled widgets,
+where they placed them, and each widget's data from d3l (Brightspace) and the weather service.
 
-**Who's at the mirror:** for now the mirror page picks the person from a list. Face recognition
-(the `face-recog` branch) should replace that step by working out a `person_id`. Everything after
-that stays the same.
+**Your face is the key.** The mirror page ([`frontends/mirror`](../../frontends/mirror/README.md))
+sends camera frames to `/api/identify`. When the [faces service](../faces/README.md) recognizes
+someone, the answer includes a short-lived *pass*, and only that pass can load their data from
+`/api/mirror`. There's no other way to get a person's data from here: no key, no list of people,
+no lookups by ID.
 
 ## Running it
 
-From the repo root:
+From the repo root (needs `FACES_API_KEY` in `.env`):
 
 ```bash
-cp backends/mirror/.env.example backends/mirror/.env   # set MIRROR_KEY and D3L_SERVICE_KEY
+cp backends/mirror/.env.example backends/mirror/.env   # set D3L_SERVICE_KEY
 docker compose --profile d3l --profile mirror up -d --build
-# open http://localhost:8080/#key=<MIRROR_KEY>
+# open http://localhost:8080 and allow the camera
 ```
 
-Tests (against a fake database and fake d3l/weather):
+Tests (against a fake database and fake d3l, weather and faces services):
 
 ```bash
 cd backends/mirror
@@ -28,21 +29,36 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 
 | Setting | What |
 |---|---|
-| `MIRROR_KEY` | What the mirror page must send. Everything here is personal data and the page is public |
 | `D3L_SERVICE_KEY` | d3l's `SERVICE_API_KEY`, for reading any person's Brightspace data |
-| `DATABASE_URL`, `D3L_URL`, `WEATHER_URL` | Where the other parts are (compose fills these in) |
+| `FACES_API_KEY` | The faces service's key |
+| `DATABASE_URL`, `D3L_URL`, `WEATHER_URL`, `FACES_URL` | Where the other parts are (compose fills these in) |
 | `MIRROR_TIMEZONE` | Where the mirror is, for what "today" means. Default `America/New_York` |
 
 ## API
 
-Every route except `/api/health` needs `Authorization: Bearer <MIRROR_KEY>`. Errors look like
-`{"error": "...", "code": "..."}`, e.g. `bad_mirror_key` (401) or `no_such_person` (404).
+Errors look like `{"error": "...", "code": "..."}`.
 
-### `GET /api/people`
+### `POST /api/identify`
 
-Everyone the mirror knows: `[{"id": 3, "name": "Alex Smith"}]`.
+The body is one camera frame (`Content-Type: image/jpeg`, PNG or WebP, under 2 MB).
 
-### `GET /api/people/{id}/mirror`
+```json
+{ "faces": 1, "person": { "id": 3, "name": "Alex Smith" },
+  "pass": "MzoxNzk0...", "expiresAt": "2026-11-14T22:10:00+00:00" }
+```
+
+- **Nobody recognized:** `person`, `pass` and `expiresAt` are `null`. `faces` is how many faces
+  were in the frame, so the page can tell "a stranger is here" from "nobody is here".
+- **Passes** last 2 minutes and are signed by the server, so they can't be forged or changed to
+  another person. The page gets a fresh one on every recognition. Restarting the backend cancels
+  all passes; the page just gets a new one on its next frame.
+- **Rate limit:** 8 requests at once per visitor, refilling at 4 per second. Beyond that you get
+  `429 rate_limited`. The page sends 2 per second.
+- **Errors:** `415`/`400 bad_image`, `413 too_large`, `503 faces_unavailable`.
+
+### `GET /api/mirror`
+
+Send `Authorization: Bearer <pass>`. Without a valid pass you get `401 pass_expired`.
 
 ```json
 {
@@ -50,9 +66,9 @@ Everyone the mirror knows: `[{"id": 3, "name": "Alex Smith"}]`.
   "timezone": "America/New_York",
   "generatedAt": "2026-11-14T20:51:00Z",
   "widgets": [
-    { "key": "weather", "name": "Weather", "x": 0.72, "y": 0.03, "w": 0.25, "h": 0.15,
+    { "key": "weather", "name": "Weather", "x": 0.70, "y": 0.03, "w": 0.28, "h": 0.30,
       "settings": {}, "data": { "...": "the weather service's response" }, "error": null },
-    { "key": "calendar", "name": "Calendar", "x": 0.03, "y": 0.62, "w": 0.45, "h": 0.35,
+    { "key": "calendar", "name": "Calendar", "x": 0.02, "y": 0.21, "w": 0.28, "h": 0.76,
       "settings": {}, "data": null,
       "error": { "code": "signin_required", "message": "Connect Brightspace in the app to see this" } }
   ]
@@ -87,8 +103,10 @@ Only enabled widgets are included. Each one's `data`:
 
 | File | What |
 |---|---|
-| `app/main.py` | Routes and the mirror key check |
+| `app/main.py` | Routes: recognizing faces, handing out passes, loading a person's mirror |
+| `app/passes.py` | The short-lived signed passes |
+| `app/ratelimit.py` | Limiting how fast one visitor can send frames |
 | `app/widgets.py` | Which data each widget needs, building it, and the day summary |
-| `app/sources.py` | Calling d3l and weather, and trimming Brightspace's data |
+| `app/sources.py` | Calling d3l, weather and faces, and trimming Brightspace's data |
 | `app/store.py` | Reading people and widget layouts from the database |
 | `tests/` | Tests against a fake database and fake backends |

@@ -1,4 +1,4 @@
-"""Runs the mirror backend against a fake database and fake d3l/weather services."""
+"""Runs the mirror backend against a fake database and fake d3l, weather and faces services."""
 
 from __future__ import annotations
 
@@ -12,15 +12,15 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from app.passes import Passes
 from app.sources import Assignment, Event, course_name
 from app.store import Person, WidgetPlacement
 from app.widgets import summarize
 
 ZONE = ZoneInfo("America/New_York")
-KEY = "mirror-key-0123456789abcdef0123456789"
 SETTINGS = Settings(
     database_url="unused", d3l_url="http://d3l", d3l_service_key="service-key",
-    weather_url="http://weather", mirror_key=KEY, timezone=ZONE,
+    weather_url="http://weather", faces_url="http://faces", faces_api_key="faces-key", timezone=ZONE,
 )
 NOW = datetime.now(timezone.utc)
 
@@ -46,9 +46,6 @@ class FakeStore:
     def __init__(self, widgets: list[WidgetPlacement]):
         self.widgets = widgets
 
-    async def people(self):
-        return [Person(3, "Alex Smith"), Person(4, "Riley Jones")]
-
     async def person(self, person_id):
         return {3: Person(3, "Alex Smith"), 4: Person(4, "Riley Jones")}.get(person_id)
 
@@ -66,10 +63,27 @@ WEATHER = {
 class FakeBackends:
     def __init__(self):
         self.requests: list[httpx.Request] = []
+        self.face_requests: list[httpx.Request] = []
         self.signed_in = True
         self.weather_up = True
+        self.faces_up = True
+
+    def faces(self, request: httpx.Request) -> httpx.Response:
+        """The 'frame' is a script: b"face:3" (person 3), b"stranger", b"nobody", b"broken"."""
+        self.face_requests.append(request)
+        assert request.headers["authorization"] == "Bearer faces-key"
+        if not self.faces_up:
+            return httpx.Response(503, json={"error": "down"})
+        frame = request.content.decode()
+        if frame == "broken":
+            return httpx.Response(400, json={"error": "Not a readable image", "code": "bad_image"})
+        if frame.startswith("face:"):
+            return httpx.Response(200, json={"faces": 1, "match": {"personId": int(frame[5:]), "similarity": 0.9}})
+        return httpx.Response(200, json={"faces": 0 if frame == "nobody" else 1, "match": None})
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.url.host == "faces":
+            return self.faces(request)
         self.requests.append(request)
         path = request.url.path
         if request.url.host == "weather":
@@ -132,7 +146,17 @@ def backends() -> FakeBackends:
 
 def client_for(backends: FakeBackends, widgets: list[WidgetPlacement]) -> TestClient:
     app = create_app(SETTINGS, store=FakeStore(widgets), transport=httpx.MockTransport(backends))
-    return TestClient(app, headers={"Authorization": f"Bearer {KEY}"})
+    return TestClient(app)
+
+
+def identify(client: TestClient, frame: str, content_type: str = "image/jpeg"):
+    return client.post("/api/identify", content=frame.encode(), headers={"Content-Type": content_type})
+
+
+def load_mirror(client: TestClient, frame: str = "face:3") -> dict:
+    """What the mirror page does: recognize a face, then load that person's mirror with the pass."""
+    token = identify(client, frame).json()["pass"]
+    return client.get("/api/mirror", headers={"Authorization": f"Bearer {token}"}).json()
 
 
 ALL = [placement(k) for k in ("clock", "greeting", "weather", "calendar", "assignments", "announcements", "summary")]
@@ -142,28 +166,64 @@ def widget(body: dict, key: str) -> dict:
     return next(w for w in body["widgets"] if w["key"] == key)
 
 
-def test_needs_mirror_key(backends):
-    app = create_app(SETTINGS, store=FakeStore(ALL), transport=httpx.MockTransport(backends))
-    with TestClient(app) as client:
-        assert client.get("/api/people").status_code == 401
-        wrong = client.get("/api/people/3/mirror", headers={"Authorization": "Bearer nope"})
-        assert wrong.status_code == 401 and wrong.json()["code"] == "bad_mirror_key"
-
-
-def test_people(backends):
+def test_recognized_face_gets_a_pass(backends):
     with client_for(backends, ALL) as client:
-        assert client.get("/api/people").json() == [{"id": 3, "name": "Alex Smith"}, {"id": 4, "name": "Riley Jones"}]
+        body = identify(client, "face:3").json()
+    assert body["faces"] == 1 and body["person"] == {"id": 3, "name": "Alex Smith"}
+    assert body["pass"] and body["expiresAt"]
+    assert backends.face_requests[0].headers["content-type"] == "image/jpeg"
 
 
-def test_unknown_person(backends):
+def test_no_pass_for_strangers_or_empty_rooms(backends):
     with client_for(backends, ALL) as client:
-        response = client.get("/api/people/99/mirror")
-    assert response.status_code == 404 and response.json()["code"] == "no_such_person"
+        assert identify(client, "stranger").json() == {"faces": 1, "person": None, "pass": None, "expiresAt": None}
+        assert identify(client, "nobody").json() == {"faces": 0, "person": None, "pass": None, "expiresAt": None}
+        # Recognized, but that person has since been deleted.
+        assert identify(client, "face:99").json()["pass"] is None
+
+
+def test_mirror_needs_a_valid_pass(backends):
+    with client_for(backends, ALL) as client:
+        assert client.get("/api/mirror").json()["code"] == "pass_expired"
+        token = identify(client, "face:3").json()["pass"]
+        forged = token[:-2] + ("AA" if not token.endswith("AA") else "BB")
+        assert client.get("/api/mirror", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
+        # The old ways in are gone.
+        assert client.get("/api/people").status_code == 404
+        assert client.get("/api/people/3/mirror").status_code == 404
+
+
+def test_passes_expire_and_cant_be_moved():
+    passes = Passes(lifetime_seconds=60, secret=b"s" * 32)
+    token, _ = passes.issue(3)
+    assert passes.check(token) == 3
+    assert Passes(lifetime_seconds=-1, secret=b"s" * 32).check(Passes(-1, b"s" * 32).issue(3)[0]) is None
+    assert Passes(60, secret=b"other" * 8).check(token) is None   # signed by a different server
+    body, signature = token.split(".")
+    other_body = Passes(60, b"x" * 32).issue(4)[0].split(".")[0]
+    assert passes.check(f"{other_body}.{signature}") is None      # someone else's ID with this signature
+    assert passes.check("garbage") is None
+
+
+def test_bad_frames(backends):
+    with client_for(backends, ALL) as client:
+        assert identify(client, "face:3", "text/plain").json()["code"] == "bad_image"
+        assert identify(client, "").json()["code"] == "too_large"
+        assert identify(client, "broken").json()["code"] == "bad_image"
+        backends.faces_up = False
+        response = identify(client, "face:3")
+        assert response.status_code == 503 and response.json()["code"] == "faces_unavailable"
+
+
+def test_rate_limited(backends):
+    with client_for(backends, ALL) as client:
+        codes = [identify(client, "nobody").status_code for _ in range(12)]
+    assert codes[:8] == [200] * 8 and 429 in codes[8:]
 
 
 def test_full_mirror(backends):
     with client_for(backends, ALL) as client:
-        body = client.get("/api/people/3/mirror").json()
+        body = load_mirror(client)
 
     assert body["person"] == {"id": 3, "name": "Alex Smith"}
     assert [w["key"] for w in body["widgets"]] == ["clock", "greeting", "weather", "calendar", "assignments", "announcements", "summary"]
@@ -188,7 +248,7 @@ def test_full_mirror(backends):
 
 def test_each_source_fetched_once(backends):
     with client_for(backends, ALL) as client:
-        client.get("/api/people/3/mirror")
+        load_mirror(client)
     paths = sorted(r.url.path for r in backends.requests)
     assert paths == ["/calendar", "/courses", "/courses/10/announcements", "/courses/11/announcements",
                      "/courses/12/announcements", "/due", "/overdue", "/weather"]
@@ -196,13 +256,13 @@ def test_each_source_fetched_once(backends):
 
 def test_only_needed_sources_fetched(backends):
     with client_for(backends, [placement("clock"), placement("weather")]) as client:
-        client.get("/api/people/3/mirror")
+        load_mirror(client)
     assert [r.url.host for r in backends.requests] == ["weather"]
 
 
 def test_units_follow_weather_widget_setting(backends):
     with client_for(backends, [placement("weather", {"units": "metric"})]) as client:
-        body = client.get("/api/people/3/mirror").json()
+        body = load_mirror(client)
     assert backends.requests[0].url.params["units"] == "metric"
     assert widget(body, "weather")["data"]["units"]["temperature"] == "°C"
 
@@ -210,7 +270,7 @@ def test_units_follow_weather_widget_setting(backends):
 def test_not_signed_in_only_affects_brightspace_widgets(backends):
     backends.signed_in = False
     with client_for(backends, ALL) as client:
-        body = client.get("/api/people/3/mirror").json()
+        body = load_mirror(client)
 
     for key in ("calendar", "assignments", "announcements"):
         assert widget(body, key)["data"] is None
@@ -223,7 +283,7 @@ def test_not_signed_in_only_affects_brightspace_widgets(backends):
 def test_weather_down_only_affects_weather(backends):
     backends.weather_up = False
     with client_for(backends, ALL) as client:
-        body = client.get("/api/people/3/mirror").json()
+        body = load_mirror(client)
     assert widget(body, "weather")["error"]["code"] == "weather_unavailable"
     assert widget(body, "calendar")["error"] is None
 
@@ -247,7 +307,7 @@ def test_course_names_shortened():
 
 def test_announcements(backends):
     with client_for(backends, [placement("announcements")]) as client:
-        body = client.get("/api/people/3/mirror").json()
+        body = load_mirror(client)
 
     items = widget(body, "announcements")["data"]["announcements"]
     assert [a["title"] for a in items] == ["Room change", "Exam moved"]  # newest first
