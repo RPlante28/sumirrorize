@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+httpx
+python-dotenv
+numpy
+opencv-python-headless
+face-recognition
