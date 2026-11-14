@@ -17,16 +17,28 @@ Apps connect with `postgresql://sumirrorize:<password>@localhost:5432/sumirroriz
 
 ### Changing the schema
 
-Postgres only runs `init/` when its data is empty. After editing a file there, wipe
-your local copy and start fresh:
+Postgres only runs `init/` when its data is empty, in name order. So **add a new numbered
+file** (e.g. `005_something.sql`) rather than editing an old one. A fresh database runs it
+along with the rest. An existing one (the server, or your local copy) needs it run by hand:
 
 ```bash
-docker compose down -v && docker compose up -d
+docker exec -i sumirrorize-db psql -U sumirrorize < db/init/005_something.sql   # server
+docker compose exec -T db psql -U sumirrorize < db/init/005_something.sql       # local
 ```
 
-That deletes everything in your local database. Once the server holds real people's
-data, this stops being an option and we'll need proper migrations (Alembic fits,
-since the backend already uses SQLAlchemy).
+Write these files so running them twice is harmless (`ON CONFLICT DO NOTHING`, `IF NOT EXISTS`).
+Or, while your local data doesn't matter, wipe it and start fresh:
+`docker compose down -v && docker compose up -d`.
+
+| File | What |
+|---|---|
+| `001_schema.sql` | The tables |
+| `002_widgets.sql` | The original widgets |
+| `003_brightspace_session.sql` | d3l's saved Brightspace logins |
+| `004_announcements_and_layout.sql` | The announcements widget, and a default layout that keeps the middle clear |
+
+Once there are many of these, a migration tool that tracks which files have run would be worth it
+(Alembic fits Python).
 
 ## Tables
 
@@ -43,7 +55,7 @@ person ──< picture          any number, each labeled with its angle (front, 
 |---|---|
 | `person` | `person_id`, `display_name`, and `api_key_hash`: the SHA-256 of their API key. The key itself is never stored. |
 | `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the 128 numbers `face_recognition` produces. `face_encoding` is empty if no face was found, which is common for side shots. A new upload replaces the person's whole set. |
-| `widget` | The widgets the mirror offers (`clock`, `weather`, `summary`, `greeting`, `calendar`, `assignments`), each with a description and a default layout. |
+| `widget` | The widgets the mirror offers (`clock`, `greeting`, `summary`, `weather`, `calendar`, `assignments`, `announcements`), each with a description and a default layout. |
 | `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"city": "Poughkeepsie"}`). |
 | `brightspace_session` | The person's saved Brightspace login, encrypted by d3l. Only d3l reads or writes it; ask d3l (`GET /session`) whether someone is signed in. |
 
@@ -113,5 +125,6 @@ WHERE pw.person_id = $1 AND pw.widget_key = v.widget_key;
 
 ## Adding a widget type
 
-Add a row to `init/002_widgets.sql` (so fresh databases get it) and insert the same row
-into any database that's already running. Everyone gets it automatically.
+Add an `INSERT INTO widget ... ON CONFLICT (widget_key) DO NOTHING` in a new numbered file in
+`init/` (see `004_announcements_and_layout.sql`), and run it on existing databases. Everyone
+who already exists gets the widget automatically, at its default position.
