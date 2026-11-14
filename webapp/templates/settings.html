@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>settings</title>
+  <link rel="stylesheet" href="../static/style.css">
+</head>
+<body>
+  <header>Sumorrize</header>
+
+  <main>
+    <div class="container">
+        <h1>My Sumorrizerer </h1>
+
+        <hr width="100%" size="2">
+       
+        <div class="unit-container">
+            <span>Metric</span>
+
+            <label class="switch">
+                <input type="checkbox" id="unitSwitch"
+                    onchange="toggleUnit()">
+                <span class="slider"></span>
+            </label>
+
+            <span>Imperial</span>
+        </div>
+
+        <p id="unitLabel">Selected: Metric (cm / kg)</p>
+
+    </div>
+  </main>
+
+  <footer> 
+    <img class="footer-img" src="../static/img/OurLogo.png" alt="Marist Logo">
+  </footer>
+
+</body>
+</html>
+
+<script>
+let currentUnit = "metric";
+
+function toggleUnit() {
+    const checked = document.getElementById("unitSwitch").checked;
+
+    currentUnit = checked ? "imperial" : "metric";
+
+    document.getElementById("unitLabel").textContent =
+        currentUnit === "metric"
+        ? "Selected: Metric (cm / kg)"
+        : "Selected: Imperial (in / lbs)";
+}
+</script>
