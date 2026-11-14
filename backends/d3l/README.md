@@ -9,7 +9,7 @@ into a single array.
 
 ## Setup
 
-d3l needs the Sumirrorize database running (see [../db/README.md](../db/README.md)).
+d3l needs the Sumirrorize database running (see [../../db/README.md](../../db/README.md)).
 
 ```bash
 cp .env.example .env   # fill in every value
@@ -18,7 +18,7 @@ cp .env.example .env   # fill in every value
 Then either run it in Docker (works anywhere, including servers without a desktop):
 
 ```bash
-cd .. && docker compose --profile d3l up -d --build   # http://localhost:3100
+cd ../.. && docker compose --profile d3l up -d --build   # http://localhost:3100
 ```
 
 or directly (needs a machine Chromium can run on, e.g. your laptop):

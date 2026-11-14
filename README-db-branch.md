@@ -7,7 +7,7 @@ This branch adds two things:
    with their own account through a tab in the app, and d3l keeps everyone's session alive.
 
 Details live next to the code: [db/README.md](db/README.md) for the tables and queries,
-[d3l/README.md](d3l/README.md) for the API. This page covers how it fits together, how to run
+[backends/d3l/README.md](backends/d3l/README.md) for the API. This page covers how it fits together, how to run
 and deploy it, what the frontends need to do, and the drawbacks.
 
 ## How it fits together
@@ -36,18 +36,18 @@ Each teammate runs their own copy. From the repo root:
 
 ```bash
 cp .env.example .env            # set POSTGRES_PASSWORD to anything
-docker compose up -d            # just the database
+docker compose up -d            # the database and the weather service
 ```
 
 To run d3l too:
 
 ```bash
-cp d3l/.env.example d3l/.env    # D2L_HOST=brightspace.marist.edu, and generate the two keys
+cp backends/d3l/.env.example backends/d3l/.env    # D2L_HOST=brightspace.marist.edu, and generate the two keys
 docker compose --profile d3l up -d --build      # d3l on http://localhost:3100
 ```
 
 The d3l image is about 2 GB because it includes a browser. On a laptop you can skip Docker for
-d3l: `cd d3l && npm install && npm run dev`.
+d3l: `cd backends/d3l && npm install && npm run dev`.
 
 **Changing the schema:** edit `db/init/`, then reset your local database with
 `docker compose down -v && docker compose up -d`. This deletes your local data.
@@ -138,7 +138,7 @@ layout. [db/README.md](db/README.md) has the ready-made queries.
 
 ## Testing a real Marist sign-in
 
-Not done yet: it needs a real student account and MFA. Once the hostname is live:
+Done once on the server (see below). To repeat it:
 
 ```bash
 # Make a test person (pick any long random key)
@@ -166,6 +166,13 @@ docker exec sumirrorize-db psql -U sumirrorize -c "DELETE FROM person WHERE disp
   tab.
 - **On the server, through Traefik:** the tab streams Marist's real login page from the
   locked-down container.
+- **A real Marist sign-in, end to end** (Nov 14), through `sumirrorize-api.marist.dev`:
+  Marist SSO, Duo, then reading real data. `/me`, `/courses`, `/due`, `/overdue` and
+  `/calendar` all returned data in under 2 seconds, and the saved login was confirmed
+  encrypted in the database.
+- **Not tested yet:** a session surviving past Brightspace's 3-hour idle timeout on the
+  keep-alive alone. It works against the fake Brightspace, but hasn't been tried against
+  Marist over that long.
 
 ## Drawbacks and things to know
 
@@ -193,6 +200,9 @@ docker exec sumirrorize-db psql -U sumirrorize -c "DELETE FROM person WHERE disp
   page currently loads fine in it.
 
 **The sign-in tab**
+- **Duo options.** Duo Push and typed passcodes work. Touch ID, Windows Hello and security
+  keys don't, because they need hardware on the computer running the browser, which is the
+  server. Students offered one of those should pick "Other options" and choose Push or Passcode.
 - **Desktop only.** A phone's on-screen keyboard won't open in the tab, so the phone-app
   simulator should run on a computer for the demo.
 - **Some page elements don't show.** Dropdown menus (`<select>`) don't appear in the stream.
