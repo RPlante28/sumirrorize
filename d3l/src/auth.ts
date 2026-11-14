@@ -1,6 +1,8 @@
-import { signInWithBrowser } from "./browser-login.js";
+import type { Cookie } from "playwright";
+import { signInSilently } from "./browser.js";
 import { D2L_HOST } from "./config.js";
-import { loadCookies } from "./cookies.js";
+import { signInRequired } from "./errors.js";
+import { forgetSession, loadCookies, peopleWithSessions, updateCookies } from "./sessions.js";
 
 const BASE_URL = `https://${D2L_HOST}`;
 const REFRESH_MARGIN = 5 * 60_000;
@@ -11,12 +13,13 @@ const XSRF_TOKEN = /localStorage\.setItem\('XSRF\.Token','([^']+)'\)/;
 
 type Token = { token: string; expiresAt: number };
 
-let cached: Token = { token: "", expiresAt: 0 };
-let pending: Promise<string> | null = null;
+// Per person: their current API token, and the renewal in flight (if any).
+const tokens = new Map<number, Token>();
+const renewals = new Map<number, Promise<string>>();
 
-function cookieHeader(): string {
-  const host = `.${D2L_HOST.toLowerCase()}`;
-  return loadCookies()
+function cookieHeader(cookies: Cookie[]): string {
+  const host = `.${D2L_HOST}`;
+  return cookies
     .filter((c) => host.endsWith(`.${c.domain.replace(/^\./, "")}`))
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
@@ -24,10 +27,11 @@ function cookieHeader(): string {
 
 /**
  * Gets an API token the way the Brightspace web app does: session cookie plus the XSRF
- * token embedded in /d2l/home. No browser needed. Returns null once the session has ended.
+ * token embedded in /d2l/home. No browser needed. Returns null if the session has ended;
+ * throws if Brightspace couldn't be reached (which says nothing about the session).
  */
-async function mintToken(): Promise<Token | null> {
-  const cookie = cookieHeader();
+export async function mintToken(cookies: Cookie[]): Promise<Token | null> {
+  const cookie = cookieHeader(cookies);
   if (!cookie) return null;
 
   // An ended session redirects to the login page instead of returning 200.
@@ -48,41 +52,63 @@ async function mintToken(): Promise<Token | null> {
   return { token: access_token, expiresAt: expires_at * 1000 };
 }
 
-async function refresh(): Promise<string> {
-  let minted = await mintToken();
+async function renewNow(personId: number): Promise<string> {
+  const cookies = await loadCookies(personId);
+  if (cookies.length === 0) throw signInRequired();
+
+  let minted = await mintToken(cookies);
   if (!minted) {
-    console.error("[auth] Brightspace session has ended, signing in again");
-    await signInWithBrowser();
-    minted = await mintToken();
-    if (!minted) throw new Error("Signed in, but Brightspace would not issue an API token.");
+    const renewed = await signInSilently(cookies);
+    if (renewed) {
+      await updateCookies(personId, renewed);
+      minted = await mintToken(renewed);
+    }
   }
-  cached = minted;
+  if (!minted) {
+    console.error(`[auth] Person ${personId}'s Brightspace session has ended; they need to sign in again`);
+    await forgetSession(personId);
+    forgetToken(personId);
+    throw signInRequired();
+  }
+  tokens.set(personId, minted);
   return minted.token;
 }
 
-export async function getToken(): Promise<string> {
-  if (cached.token && Date.now() < cached.expiresAt - REFRESH_MARGIN) {
-    return cached.token;
+/** Mints a fresh token. Concurrent callers for the same person share one renewal. */
+function renew(personId: number): Promise<string> {
+  let renewal = renewals.get(personId);
+  if (!renewal) {
+    renewal = renewNow(personId).finally(() => renewals.delete(personId));
+    renewals.set(personId, renewal);
   }
-  // Concurrent requests share one refresh; parallel browser logins would each prompt for MFA.
-  pending ??= refresh().finally(() => {
-    pending = null;
-  });
-  return pending;
+  return renewal;
 }
 
-export function clearToken(): void {
-  cached = { token: "", expiresAt: 0 };
+export async function getToken(personId: number): Promise<string> {
+  const cached = tokens.get(personId);
+  if (cached && Date.now() < cached.expiresAt - REFRESH_MARGIN) return cached.token;
+  return renew(personId);
 }
 
-/**
- * Re-mints the token on a timer so the session never idles out. Never opens a browser:
- * if the session has ended, the next real request does the sign-in.
- */
+/** Drops a person's cached token, e.g. after Brightspace rejected it or they signed in again. */
+export function forgetToken(personId: number): void {
+  tokens.delete(personId);
+}
+
+/** Re-mints everyone's token on a timer so no session idles out. */
 export function startKeepAlive(): void {
   setInterval(async () => {
-    const minted = await mintToken().catch(() => null);
-    if (minted) cached = minted;
-    else console.error("[auth] Keep-alive found the session ended; the next request will sign in");
+    const people = await peopleWithSessions().catch((error) => {
+      console.error(`[auth] Keep-alive couldn't list sessions: ${error.message}`);
+      return [];
+    });
+    for (const personId of people) {
+      // A signin_required failure was already logged; anything else is likely temporary.
+      await renew(personId).catch((error) => {
+        if (error.code !== "signin_required") {
+          console.error(`[auth] Keep-alive for person ${personId} failed: ${error.message}`);
+        }
+      });
+    }
   }, KEEP_ALIVE_INTERVAL).unref();
 }

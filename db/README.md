@@ -33,8 +33,10 @@ since the backend already uses SQLAlchemy).
 ```
 person ──< picture          any number, each labeled with its angle (front, left, ...)
    │
-   └────< person_widget >── widget
-          (one row per person per widget: on/off, position, settings)
+   ├────< person_widget >── widget
+   │      (one row per person per widget: on/off, position, settings)
+   │
+   └────  brightspace_session   (at most one; managed by d3l)
 ```
 
 | Table | What it holds |
@@ -43,6 +45,7 @@ person ──< picture          any number, each labeled with its angle (front, 
 | `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the 128 numbers `face_recognition` produces. `face_encoding` is empty if no face was found, which is common for side shots. A new upload replaces the person's whole set. |
 | `widget` | The widgets the mirror offers (`clock`, `weather`, `summary`, `greeting`, `calendar`, `assignments`), each with a description and a default layout. |
 | `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"city": "Poughkeepsie"}`). |
+| `brightspace_session` | The person's saved Brightspace login, encrypted by d3l. Only d3l reads or writes it; ask d3l (`GET /session`) whether someone is signed in. |
 
 Positions are fractions of the screen: `(0, 0)` is the top-left corner and `(1, 1)` the
 bottom-right. `x`/`y` is the widget's top-left corner and `w`/`h` its size, so a layout
@@ -51,7 +54,7 @@ looks the same on any screen. The database refuses a widget that runs off the sc
 Things the database does for you:
 - A new person automatically gets every widget at its default position.
 - A newly added widget type is given to everyone who already exists.
-- Deleting a person deletes their pictures and widgets.
+- Deleting a person deletes their pictures, widgets and Brightspace login.
 - `updated_at` is set automatically on every change.
 
 ## Common queries
