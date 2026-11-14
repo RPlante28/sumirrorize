@@ -13,3 +13,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+## Camera preview
+
+```bash
+python scripts/mirror.py
+```
+
+Press Escape or close the window to exit.
