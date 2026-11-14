@@ -9,31 +9,23 @@
   <script src="/mirror.js" type="module"></script>
 </head>
 <body>
-  <!-- Asks for the mirror key once per device. -->
-  <section id="setup" class="screen" hidden>
-    <form id="setup-form" class="setup">
-      <h1>Set up this mirror</h1>
-      <p>Enter the mirror key to connect this screen.</p>
-      <input id="setup-key" type="password" autocomplete="off" placeholder="Mirror key" required>
-      <button type="submit">Connect</button>
-      <p id="setup-error" class="error" hidden></p>
-    </form>
-  </section>
-
-  <!-- Until face recognition exists, choose who's at the mirror. -->
+  <!-- Shown while nobody is recognized. -->
   <section id="idle" class="screen" hidden>
     <div class="idle">
       <div id="idle-time" class="idle-time"></div>
       <div id="idle-date" class="idle-date"></div>
-      <p class="idle-prompt">Who's at the mirror?</p>
-      <div id="people" class="people"></div>
+      <p id="idle-prompt" class="idle-prompt">Step up to the mirror</p>
+      <button id="camera-retry" type="button" hidden>Allow camera</button>
     </div>
   </section>
 
   <section id="mirror" class="screen" hidden>
     <div id="widgets"></div>
-    <button id="switch" class="switch" type="button">Switch person</button>
     <div id="offline" class="offline" hidden>Can't reach the server, showing older data</div>
   </section>
+
+  <!-- The camera feed is never shown (the mirror is the reflection); frames are only sent to
+       the server to recognize who's there, and aren't kept. -->
+  <video id="camera" class="camera" muted playsinline></video>
 </body>
 </html>

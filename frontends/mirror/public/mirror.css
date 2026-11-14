@@ -29,30 +29,17 @@ html, body {
 
 .screen { position: fixed; inset: 0; }
 
-/* --- Setup --- */
-
-.setup {
-  max-width: 360px;
-  margin: 20vh auto 0;
-  padding: 0 16px;
-  display: grid;
-  gap: 12px;
+/* The camera feed is captured but never shown: the mirror is the reflection. It stays in the
+   page (some browsers stop updating video that's display:none). */
+.camera {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
-.setup h1 { font-weight: 300; margin: 0; }
-.setup p { color: var(--muted); margin: 0; }
-.setup input, .setup button, .people button, .switch {
-  font: inherit;
-  color: var(--text);
-  background: transparent;
-  border: 1px solid var(--faint);
-  border-radius: 6px;
-  padding: 10px 14px;
-}
-.setup button, .people button, .switch { cursor: pointer; }
-.setup button:hover, .people button:hover, .switch:hover { border-color: var(--text); }
-.error { color: var(--danger) !important; }
 
-/* --- Idle: pick who's at the mirror --- */
+/* --- Idle: nobody recognized --- */
 
 .idle {
   height: 100%;
@@ -65,8 +52,18 @@ html, body {
 .idle-time { font-size: 16vmin; font-weight: 200; line-height: 1; font-variant-numeric: tabular-nums; }
 .idle-date { font-size: 3.5vmin; color: var(--muted); }
 .idle-prompt { margin-top: 6vh; font-size: 2.6vmin; color: var(--muted); }
-.people { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 80vw; }
-.people button { font-size: 2.4vmin; padding: 1vmin 2.4vmin; }
+
+#camera-retry {
+  font: inherit;
+  font-size: 2.2vmin;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--faint);
+  border-radius: 6px;
+  padding: 1vmin 2.4vmin;
+  cursor: pointer;
+}
+#camera-retry:hover { border-color: var(--text); }
 
 /* --- Mirror --- */
 
@@ -86,16 +83,6 @@ html, body {
   color: var(--faint);
   font-size: clamp(13px, min(4.2cqw, 9cqh), 26px);
 }
-
-.switch {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  font-size: 13px;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-body.pointer-active .switch { opacity: 0.8; }
 
 .offline {
   position: fixed;

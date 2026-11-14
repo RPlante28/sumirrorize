@@ -1,20 +1,16 @@
-// The mirror display. Flow: mirror key (once per device) -> pick who's at the mirror
-// (until face recognition exists) -> their widgets, placed where they saved them.
+// The mirror display. Your face is the key: the page watches the webcam, sends a frame to the
+// server twice a second, and shows the widgets of whoever it recognizes. When they leave, it
+// clears. The camera feed is never shown and frames aren't kept.
 
-const KEY_STORAGE = "sumirrorize.mirrorKey";
-const PERSON_STORAGE = "sumirrorize.personId";
-const REFRESH_MS = 5 * 60_000;
+const REFRESH_MS = 5 * 60_000;      // widget data refresh while someone stays
+const IDENTIFY_EVERY_MS = 500;
+const FRAME_WIDTH = 640;            // frames are shrunk to this before sending
+
+// Who's-there rules, from the face-recog mirror script (scripts/mirror.py):
+const STABLE_MATCHES = 3;           // same person this many frames in a row before switching to them
+const SESSION_TIMEOUT_MS = 8_000;   // clear the mirror after this long without recognizing them
 
 const $ = (id) => document.getElementById(id);
-
-// --- Storage (can be unavailable, e.g. in private windows) ---
-
-function load(name) {
-  try { return localStorage.getItem(name); } catch { return null; }
-}
-function save(name, value) {
-  try { value === null ? localStorage.removeItem(name) : localStorage.setItem(name, value); } catch {}
-}
 
 // --- DOM helper: builds elements with text, never HTML, so Brightspace text can't inject markup ---
 
@@ -37,12 +33,20 @@ function icon(name) {
 
 // --- API ---
 
-class Unauthorized extends Error {}
+class PassExpired extends Error {}
 
-async function api(path) {
-  const response = await fetch(`/api${path}`, { headers: { Authorization: `Bearer ${load(KEY_STORAGE) ?? ""}` } });
-  if (response.status === 401) throw new Unauthorized();
-  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+/** One camera frame in, who's there out: { faces, person, pass, expiresAt }. */
+async function identify(frame) {
+  const response = await fetch("/api/identify", { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: frame });
+  if (response.status === 429) throw new Error("rate_limited");
+  if (!response.ok) throw new Error(`identify: ${response.status}`);
+  return response.json();
+}
+
+async function loadMirror(pass) {
+  const response = await fetch("/api/mirror", { headers: { Authorization: `Bearer ${pass}` } });
+  if (response.status === 401) throw new PassExpired();
+  if (!response.ok) throw new Error(`mirror: ${response.status}`);
   return response.json();
 }
 
@@ -304,24 +308,15 @@ const ICONS = {
 
 // --- Screens ---
 
-let refreshTimer = null;
-
 function show(screen) {
-  for (const id of ["setup", "idle", "mirror"]) $(id).hidden = id !== screen;
+  for (const id of ["idle", "mirror"]) $(id).hidden = id !== screen;
 }
 
-function needsKey(message) {
-  save(KEY_STORAGE, null);
-  clearInterval(refreshTimer);
-  show("setup");
-  $("setup-error").hidden = !message;
-  $("setup-error").textContent = message ?? "";
-  $("setup-key").focus();
+function tick() {
+  for (const update of live) update();
 }
 
-async function showIdle() {
-  save(PERSON_STORAGE, null);
-  clearInterval(refreshTimer);
+function idleClock() {
   live.length = 0;
   live.push(() => {
     const now = new Date();
@@ -329,79 +324,150 @@ async function showIdle() {
     $("idle-date").textContent = dateFmt.format(now);
   });
   tick();
-  show("idle");
-  try {
-    const people = await api("/people");
-    $("people").replaceChildren(...people.map((person) => {
-      const button = h("button", null, person.name);
-      button.type = "button";
-      button.addEventListener("click", () => showMirror(person.id));
-      return button;
-    }));
-    if (people.length === 0) $("people").replaceChildren(h("p", "empty", "Nobody has signed up yet."));
-  } catch (error) {
-    if (error instanceof Unauthorized) return needsKey("That key didn't work.");
-    $("people").replaceChildren(h("p", "error", "Can't reach the server."));
-  }
 }
 
-async function showMirror(personId) {
-  save(PERSON_STORAGE, String(personId));
+function setPrompt(text, showRetry = false) {
+  $("idle-prompt").textContent = text;
+  $("camera-retry").hidden = !showRetry;
+}
+
+// --- Who's at the mirror ---
+
+const session = {
+  person: null,       // { id, name } of whoever the mirror is showing
+  pass: null,         // proof from the server that it recognized them; needed to load their data
+  pending: null,      // someone recognized but not yet confirmed
+  streak: 0,
+  lastFace: 0,
+  lastConfirmed: 0,
+};
+let refreshTimer = null;
+
+/** Applies one recognition result. Ported from update_session in scripts/mirror.py. */
+function update(result, now) {
+  const recognized = result.person;
+  if (result.faces > 0) session.lastFace = now;
+
+  // Still the same person: keep them, and keep the newest pass.
+  if (session.person && recognized?.id === session.person.id) {
+    session.pass = result.pass;
+    session.lastConfirmed = now;
+    session.pending = null;
+    session.streak = 0;
+    return;
+  }
+
+  if (recognized) {
+    if (session.pending?.id === recognized.id) session.streak += 1;
+    else Object.assign(session, { pending: recognized, streak: 1 });
+    if (session.streak >= STABLE_MATCHES) {
+      Object.assign(session, { person: recognized, pass: result.pass, lastConfirmed: now, pending: null, streak: 0 });
+      showPerson();
+    }
+    return;
+  }
+
+  session.pending = null;
+  session.streak = 0;
+  const gone = result.faces > 0
+    ? now - session.lastConfirmed > SESSION_TIMEOUT_MS   // someone's there, but not them
+    : now - session.lastFace > SESSION_TIMEOUT_MS;       // nobody's there
+  if (session.person && gone) showNobody();
+}
+
+async function showPerson() {
   show("mirror");
   clearInterval(refreshTimer);
-  await refresh(personId);
-  refreshTimer = setInterval(() => refresh(personId), REFRESH_MS);
+  await refresh();
+  refreshTimer = setInterval(refresh, REFRESH_MS);
 }
 
-async function refresh(personId) {
+function showNobody() {
+  Object.assign(session, { person: null, pass: null });
+  clearInterval(refreshTimer);
+  // Their data leaves the screen (and the page) as soon as they do.
+  $("widgets").replaceChildren();
+  idleClock();
+  setPrompt("Step up to the mirror");
+  show("idle");
+}
+
+async function refresh() {
+  const person = session.person;
+  if (!person) return;
   try {
-    const mirror = await api(`/people/${personId}/mirror`);
+    const mirror = await loadMirror(session.pass);
+    if (session.person?.id !== person.id) return; // they left while it loaded
     live.length = 0;
     $("widgets").replaceChildren(...mirror.widgets.map(renderWidget));
     $("offline").hidden = true;
     tick();
     fitAll();
   } catch (error) {
-    if (error instanceof Unauthorized) return needsKey("That key didn't work.");
-    if (String(error.message).endsWith(": 404")) return showIdle();
-    // Keep showing the last good data.
-    $("offline").hidden = false;
+    // An expired pass gets replaced on the next recognition; anything else, keep the old data up.
+    if (!(error instanceof PassExpired)) $("offline").hidden = false;
   }
 }
 
-function tick() {
-  for (const update of live) update();
+// --- Camera ---
+
+const video = $("camera");
+const canvas = document.createElement("canvas");
+
+async function startCamera() {
+  try {
+    video.srcObject = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    await video.play();
+    setPrompt("Step up to the mirror");
+    return true;
+  } catch (error) {
+    const blocked = error?.name === "NotAllowedError";
+    setPrompt(blocked ? "The mirror needs camera access to recognize you." : "No camera found.", blocked);
+    return false;
+  }
+}
+
+function captureFrame() {
+  const scale = Math.min(1, FRAME_WIDTH / video.videoWidth);
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+}
+
+let watching = false;
+
+/** Starts the recognition loop (once). */
+function startWatching() {
+  if (watching) return;
+  watching = true;
+  watch();
+}
+
+/** Sends a frame, applies the answer, and schedules the next one. Only one request at a time. */
+async function watch() {
+  let delay = IDENTIFY_EVERY_MS;
+  if (!document.hidden && video.videoWidth) {
+    try {
+      const frame = await captureFrame();
+      update(await identify(frame), performance.now());
+      if (!session.person) setPrompt("Step up to the mirror");
+    } catch (error) {
+      delay = 2000;
+      if (error.message !== "rate_limited" && !session.person) setPrompt("Can't reach the server…");
+      // Treat a failed check like an empty frame, so the mirror still clears when it should.
+      update({ faces: 0, person: null }, performance.now());
+    }
+  }
+  setTimeout(watch, delay);
 }
 
 // --- Start ---
 
-function start() {
-  // A key in the link (#key=...) is saved once, then removed from the address bar.
-  const fromLink = new URLSearchParams(location.hash.slice(1)).get("key");
-  if (fromLink) {
-    save(KEY_STORAGE, fromLink);
-    history.replaceState(null, "", location.pathname + location.search);
-  }
-
-  $("setup-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    save(KEY_STORAGE, $("setup-key").value.trim());
-    $("setup-key").value = "";
-    showIdle();
-  });
-  $("switch").addEventListener("click", showIdle);
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !$("mirror").hidden) showIdle();
-  });
-
-  // The switch button only shows while the mouse is moving, so the mirror stays clean.
-  let pointerTimer;
-  document.addEventListener("pointermove", () => {
-    document.body.classList.add("pointer-active");
-    clearTimeout(pointerTimer);
-    pointerTimer = setTimeout(() => document.body.classList.remove("pointer-active"), 2500);
-  });
-
+async function start() {
   setInterval(tick, 1000);
 
   let resizeTimer;
@@ -409,10 +475,16 @@ function start() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(fitAll, 150);
   });
+  // Esc clears the mirror right away (it comes back if they're still there).
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && session.person) showNobody();
+  });
+  $("camera-retry").addEventListener("click", async () => {
+    if (await startCamera()) startWatching();
+  });
 
-  if (!load(KEY_STORAGE)) return needsKey();
-  const person = new URLSearchParams(location.search).get("person") ?? load(PERSON_STORAGE);
-  person ? showMirror(Number(person)) : showIdle();
+  showNobody();
+  if (await startCamera()) startWatching();
 }
 
 start();
