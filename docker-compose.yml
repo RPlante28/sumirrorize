@@ -1,0 +1,54 @@
+# Local development. The server copy lives in /opt/containers/sumirrorize.
+#   cp .env.example .env    # then set POSTGRES_PASSWORD
+#   docker compose up -d
+services:
+  db:
+    image: pgvector/pgvector:0.8.1-pg18
+    environment:
+      POSTGRES_DB: sumirrorize
+      POSTGRES_USER: sumirrorize
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      # Localhost only, so the database isn't reachable from the rest of the network.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sumirrorize -d sumirrorize"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Weather for the mirror's location. Set WEATHER_* in .env to move it (default: Marist).
+  weather:
+    build: ./backends/weather
+    environment:
+      WEATHER_LATITUDE: ${WEATHER_LATITUDE:-41.7225}
+      WEATHER_LONGITUDE: ${WEATHER_LONGITUDE:--73.9343}
+      WEATHER_LABEL: ${WEATHER_LABEL:-Poughkeepsie, NY}
+    ports:
+      - "127.0.0.1:${WEATHER_PORT:-3200}:3200"
+    read_only: true
+    restart: unless-stopped
+
+  # Only started when asked for: docker compose --profile d3l up -d --build
+  # Reads backends/d3l/.env; the database address is filled in here.
+  d3l:
+    profiles: [d3l]
+    build: ./backends/d3l
+    env_file: ./backends/d3l/.env
+    environment:
+      DATABASE_URL: postgresql://sumirrorize:${POSTGRES_PASSWORD}@db:5432/sumirrorize
+    ports:
+      - "127.0.0.1:${D3L_PORT:-3100}:3100"
+    # Chromium needs more shared memory than Docker's 64 MB default.
+    shm_size: 1gb
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
