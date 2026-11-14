@@ -7,7 +7,7 @@ This branch adds two things:
    with their own account through a tab in the app, and d3l keeps everyone's session alive.
 
 Details live next to the code: [db/README.md](db/README.md) for the tables and queries,
-[d3l/README.md](d3l/README.md) for the API. This page covers how it fits together, how to run
+[backends/d3l/README.md](backends/d3l/README.md) for the API. This page covers how it fits together, how to run
 and deploy it, what the frontends need to do, and the drawbacks.
 
 ## How it fits together
@@ -36,18 +36,18 @@ Each teammate runs their own copy. From the repo root:
 
 ```bash
 cp .env.example .env            # set POSTGRES_PASSWORD to anything
-docker compose up -d            # just the database
+docker compose up -d            # the database and the weather service
 ```
 
 To run d3l too:
 
 ```bash
-cp d3l/.env.example d3l/.env    # D2L_HOST=brightspace.marist.edu, and generate the two keys
+cp backends/d3l/.env.example backends/d3l/.env    # D2L_HOST=brightspace.marist.edu, and generate the two keys
 docker compose --profile d3l up -d --build      # d3l on http://localhost:3100
 ```
 
 The d3l image is about 2 GB because it includes a browser. On a laptop you can skip Docker for
-d3l: `cd d3l && npm install && npm run dev`.
+d3l: `cd backends/d3l && npm install && npm run dev`.
 
 **Changing the schema:** edit `db/init/`, then reset your local database with
 `docker compose down -v && docker compose up -d`. This deletes your local data.
