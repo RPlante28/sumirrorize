@@ -6,7 +6,7 @@ Each folder is one service with its own container and README.
 |---|---|---|---|---|
 | [`d3l/`](d3l/README.md) | Brightspace data for each person, plus the Brightspace sign-in tab | TypeScript | 3100 | Done |
 | [`weather/`](weather/README.md) | Weather for the mirror's location | Python | 3200 | Done |
-| `mirror/` | Recognizes who's at the mirror and gathers their widgets' data | | | Not started |
+| [`mirror/`](mirror/README.md) | Gathers a person's widgets and their data for the mirror. Face recognition goes here next | Python | 3300 | Working (person picked from a list) |
 | `app/` | The phone app's backend: sign-up, pictures, widget layouts | | | Not started |
 
 How they connect:

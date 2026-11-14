@@ -50,5 +50,33 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # The mirror: docker compose --profile d3l --profile mirror up -d --build
+  # Then open http://localhost:8080/#key=<MIRROR_KEY from backends/mirror/.env>
+  mirror:
+    profiles: [mirror]
+    build: ./backends/mirror
+    env_file: ./backends/mirror/.env
+    environment:
+      DATABASE_URL: postgresql://sumirrorize:${POSTGRES_PASSWORD}@db:5432/sumirrorize
+      D3L_URL: http://d3l:3100
+      WEATHER_URL: http://weather:3200
+    ports:
+      - "127.0.0.1:${MIRROR_API_PORT:-3300}:3300"
+    read_only: true
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mirror-web:
+    profiles: [mirror]
+    build: ./frontends/mirror
+    environment:
+      MIRROR_BACKEND: http://mirror:3300
+    ports:
+      - "127.0.0.1:${MIRROR_PORT:-8080}:8080"
+    depends_on: [mirror]
+    restart: unless-stopped
+
 volumes:
   pgdata:

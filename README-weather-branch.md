@@ -1,17 +1,20 @@
 # The `weather` branch
 
-This branch does two things:
+This branch does three things:
 
 1. **New folder layout.** Services are grouped by role, so it's clear where everything lives:
    ```
-   backends/   d3l (moved here from /d3l), weather, and later mirror and app
-   frontends/  later: mirror and app
+   backends/   d3l (moved here from /d3l), weather, mirror, and later app
+   frontends/  mirror, and later app
    db/         unchanged
    ```
    [backends/README.md](backends/README.md) lists every service and how they connect.
 2. **Weather service** (`backends/weather`), built from StormWatch's weather code. It gives the
    mirror's weather widget current conditions, today's high/low, the next 12 hours, and NWS
    alerts. Details: [backends/weather/README.md](backends/weather/README.md).
+3. **A working mirror** at **https://sumirrorize.marist.dev**: a backend (`backends/mirror`)
+   that gathers a person's widgets and data, and the display (`frontends/mirror`). See
+   [the mirror section](#the-mirror) below.
 
 ## What changed for teammates
 
@@ -55,3 +58,62 @@ merged) before the next d3l rebuild.
   weather APIs (about a second).
 - **No icons.** The service returns WMO weather codes and descriptions; the mirror frontend picks
   the icons.
+
+## The mirror
+
+The mirror is a page showing one person's widgets, each at the position they saved, with live
+data: clock, greeting, weather, a summary of the day, their Brightspace calendar, their
+assignments (overdue first), and recent course announcements. Each widget is a bordered card,
+lists show only whole items plus "+N more", and the default layout keeps the middle of the
+mirror clear for your reflection. Details: [backends/mirror/README.md](backends/mirror/README.md)
+and [frontends/mirror/README.md](frontends/mirror/README.md).
+
+**Using it:**
+1. Open `https://sumirrorize.marist.dev/#key=<MIRROR_KEY>` once on the mirror screen. The key is
+   in `/opt/containers/sumirrorize/.env`, and the page remembers it.
+2. Pick who's at the mirror. This stands in for face recognition.
+3. To switch person, move the mouse and click "Switch person", or press Esc.
+
+**Locally:** run `db/init/004_announcements_and_layout.sql` on your database if it existed
+before this branch (see `db/README.md`). Then `cp backends/mirror/.env.example backends/mirror/.env`,
+fill it in, and run
+`docker compose --profile d3l --profile mirror up -d --build` and open `http://localhost:8080`.
+
+**Server:**
+
+| Container | What | Reachable at |
+|---|---|---|
+| `sumirrorize-mirror-web` | The page (nginx), forwards `/api/` to the backend | `https://sumirrorize.marist.dev` |
+| `sumirrorize-mirror` | The mirror backend | `sumirrorize` network only |
+
+**Tested:**
+- **Automated:** 12 tests against a fake database and fake d3l and weather services. They cover
+  the mirror key, filtering assignments and announcements (hidden, unpublished, old, scheduled,
+  ended courses, posts shared between courses), each source being fetched once and only when
+  needed, the units setting, one failing source not affecting other widgets, the summary
+  wording, and shortening course names.
+- **Live:** on the server with the friend's real Brightspace data. All seven widgets load
+  through the public address in about a second (announcements check each course). The page was checked in a real browser at
+  1080p and 720p, including remembering the person after a reload.
+
+### Mirror drawbacks
+
+- **No face recognition yet.** The mirror shows a person picker. The `face-recog` work should
+  produce a `person_id` in `backends/mirror`, and the rest stays the same.
+- **One key for the whole mirror.** It's stored in the browser on the mirror screen, and anyone
+  with it can see every person's mirror. Treat it like a password, and change `MIRROR_KEY` (then
+  restart `sumirrorize-mirror`) if it leaks. Putting Cloudflare Access in front of
+  `sumirrorize.marist.dev` would add a proper login.
+- **The calendar is Brightspace's calendar.** It mostly holds due dates and course events, not
+  class times; Marist keeps class schedules elsewhere.
+- **The summary is fill-in-the-blank, not AI.** It's built from counts and the weather.
+- **Default layout until the app exists.** Widgets sit where the database's default layout
+  puts them until the app lets people move them. The new layout and the announcements widget
+  come from `db/init/004_announcements_and_layout.sql`. Fresh databases get it automatically.
+  Existing ones (including teammates' local copies) need it run by hand; see `db/README.md`.
+  People who already existed keep their old layout. On the server, the test person was moved
+  to the new layout by hand.
+- **Announcements cost a request per course.** About half a second for 27 courses, on every
+  5-minute refresh.
+- **5-minute refresh.** Brightspace and weather data refresh every 5 minutes, so a newly posted
+  assignment can take that long to appear.

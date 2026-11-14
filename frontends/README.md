@@ -2,7 +2,7 @@
 
 | Folder | What | Status |
 |---|---|---|
-| `mirror/` | The mirror display (projected onto the mirror for the demo) | Not started |
+| [`mirror/`](mirror/README.md) | The mirror display, live at https://sumirrorize.marist.dev | Working |
 | `app/` | Simulates the phone app: sign-up with pictures, widget layout, Brightspace sign-in | Not started |
 
 Each one talks only to its own backend in [`../backends/`](../backends/README.md), except that the
