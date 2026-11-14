@@ -11,9 +11,17 @@ def main():
         if not camera.isOpened():
             raise RuntimeError("Could not open the default camera")
 
+        face_detector = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        if face_detector.empty():
+            raise RuntimeError("Could not load the face detector")
+
         pygame.display.set_caption("sumirrorize")
         window = pygame.display.set_mode((960, 540), pygame.RESIZABLE)
         clock = pygame.time.Clock()
+        faces = () #track number of faces and stuff to keep track of the number of faces and stuff in da frame type sh
+        frame_number = 0
 
         while True:
             for event in pygame.event.get():
@@ -27,7 +35,20 @@ def main():
                 raise RuntimeError("Could not read a frame from the camera")
 
             # mirror the video feed to make it more like a MIRROR!!!!
-            frame = cv2.cvtColor(cv2.flip(frame, 1), cv2.COLOR_BGR2RGB)
+            frame = cv2.flip(frame, 1)
+
+            # look for face every three frame
+            frame_number = (frame_number + 1) % 3
+            if frame_number == 0:
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_detector.detectMultiScale(
+                    gray_frame, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+                )
+
+            for x, y, width, height in faces:
+                cv2.rectangle(frame, (x, y), (x + width, y + height), (0, 255, 0), 2)
+
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame_height, frame_width = frame.shape[:2]
             image = pygame.image.frombuffer(
                 frame.tobytes(), (frame_width, frame_height), "RGB"
