@@ -1,0 +1,26 @@
+{
+  "name": "d3l",
+  "version": "0.1.0",
+  "description": "JSON API over a student's Brightspace (D2L) data",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "login": "node dist/login.js",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "playwright": "^1.65.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}
