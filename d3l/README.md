@@ -1,40 +1,78 @@
 # d3l
 
-A small JSON API over one student's Brightspace (D2L) data, for a phone app to read from.
+A JSON API over students' Brightspace (D2L) data. Each person signs in to Brightspace once,
+and d3l keeps their session alive and fetches their data for the app and the mirror.
 
 It forwards requests to the [Brightspace API](https://docs.valence.desire2learn.com/reference.html)
-as you. Responses come back exactly as Brightspace sends them, with paged results merged into a
-single array.
+as that person. Responses come back exactly as Brightspace sends them, with paged results merged
+into a single array.
 
 ## Setup
 
+d3l needs the Sumirrorize database running (see [../db/README.md](../db/README.md)).
+
 ```bash
-npm install
-cp .env.example .env   # set D2L_HOST and API_KEY
-npm run build
-npm run login          # opens a browser: sign in once, including MFA
-npm start              # http://localhost:3100
+cp .env.example .env   # fill in every value
 ```
 
-The app must send `Authorization: Bearer <API_KEY>` with every request.
+Then either run it in Docker (works anywhere, including servers without a desktop):
 
-## How sign-in works
+```bash
+cd .. && docker compose --profile d3l up -d --build   # http://localhost:3100
+```
 
-1. `npm run login` signs in with a real browser once (so SSO and MFA work) and saves the
-   session cookies to `~/.d3l-cookies.json`. Anyone with that file is signed in as you.
-2. The server gets 60-minute API tokens with plain HTTP requests using those cookies, the same
-   way the Brightspace website does. No browser.
-3. Every 30 minutes it renews the token, so the session never reaches Brightspace's 180-minute
-   idle timeout. Restarts reuse the cookies.
-4. If the session ends anyway, it signs in again, cheapest way first:
-   - Saved cookies in a headless browser. This works without a password while your school's
-     login (SSO) session is still alive.
-   - `D2L_USERNAME`/`D2L_PASSWORD` if set. MFA prompts can't be answered this way.
-   - A visible browser window, if the machine has a display.
+or directly (needs a machine Chromium can run on, e.g. your laptop):
 
-   If none of these works, run `npm run login` again.
+```bash
+npm install            # also downloads Chromium
+npm run dev            # http://localhost:3100
+```
 
-## Routes
+## Who's asking
+
+Every request needs an `Authorization: Bearer <key>` header, in one of two forms:
+
+| Caller | Sends | Gets |
+|---|---|---|
+| A person's app | their own API key (made when they signed up; see `db/README.md`) | that person's data |
+| The mirror's backend | `SERVICE_API_KEY` plus `X-Person-Id: <person_id>` | any person's data |
+
+Errors come back as `{ "error": "...", "code": "..." }`. Codes worth handling:
+
+| Code | Status | Meaning |
+|---|---|---|
+| `bad_api_key` | 401 | Missing or wrong key |
+| `bad_person_id` | 400/404 | Service key used without a valid `X-Person-Id` |
+| `signin_required` | 401 | This person isn't signed in to Brightspace (or their session ended) |
+| `brightspace_error` | varies | Brightspace said no, e.g. `403` for a course whose access has ended |
+| `busy` | 503 | Too many sign-ins in progress at once |
+
+## Signing in to Brightspace
+
+School logins (SSO and MFA) need a real browser, and our site can't read cookies that
+Brightspace puts in the student's own browser. So the browser runs inside d3l, and the student
+uses it through a tab that shows its screen and passes their clicks and typing back.
+
+1. The app calls `POST /login` and gets back `{ "path": "/login/<one-time token>", "expiresAt": ... }`.
+2. The app opens `<d3l address><path>` in a new tab (`window.open`). The student signs in there
+   as usual. The link is the tab's only credential: it works in one tab at a time, expires
+   after 10 minutes, and stops working once used.
+3. When Brightspace is reached, d3l saves the session (encrypted) for that person, and the tab
+   says they're signed in and closes itself.
+4. Meanwhile the app polls `GET /session` until `signedIn` is `true`.
+
+| Route | What |
+|---|---|
+| `POST /login` | Start a sign-in. Starting another one cancels the first |
+| `GET /session` | `{ signedIn, signedInAt, signingIn }` |
+| `DELETE /session` | Sign out: forget the saved session and cancel any sign-in in progress |
+
+After that, d3l renews everyone's session every 30 minutes, so it never reaches Brightspace's
+3-hour idle timeout. If a session ends anyway, d3l first tries to renew it in the background
+with the saved school login. If that fails, the person's requests return `signin_required` and
+they need to sign in again.
+
+## Data routes
 
 All are `GET`. `:ou` is a course ID from `/courses` (`OrgUnit.Id`).
 
@@ -79,9 +117,20 @@ Any other query string is passed straight to Brightspace.
 `/raw/<path>` forwards a GET to `https://<D2L_HOST>/d2l/api/<path>`, e.g.
 `/raw/le/1.100/12345/news/`. Use it to try endpoints before adding them to `src/routes.ts`.
 
-Courses whose access has ended return `403`. That is Brightspace refusing, not a bug.
-
 ## Adding a route
 
 Add one line to `src/routes.ts`: app path on the left, Brightspace path on the right.
 Every `:param` must be a numeric ID.
+
+## Files
+
+| File | What |
+|---|---|
+| `src/index.ts` | Routes and startup |
+| `src/callers.ts` | Works out which person a request is for |
+| `src/remote-login.ts` | The sign-in tab: runs the browser and streams it |
+| `public/login.*` | The sign-in tab's page |
+| `src/auth.ts` | Turns saved sessions into API tokens and keeps them alive |
+| `src/sessions.ts`, `src/vault.ts` | Saving sessions in the database, encrypted |
+| `src/browser.ts` | The shared headless Chromium and background re-login |
+| `src/client.ts` | Calls Brightspace and merges paged results |

@@ -13,3 +13,12 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+### Database
+
+```bash
+cp .env.example .env   # set POSTGRES_PASSWORD
+docker compose up -d
+```
+
+See [db/README.md](db/README.md) for the tables and common queries.
