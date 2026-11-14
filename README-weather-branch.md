@@ -61,6 +61,10 @@ merged) before the next d3l rebuild.
 
 ## The mirror
 
+> **Since this branch:** the mirror key and person picker described below were replaced by face
+> recognition. Your face is the key now; see [backends/faces/README.md](backends/faces/README.md)
+> and [frontends/mirror/README.md](frontends/mirror/README.md).
+
 The mirror is a page showing one person's widgets, each at the position they saved, with live
 data: clock, greeting, weather, a summary of the day, their Brightspace calendar, their
 assignments (overdue first), and recent course announcements. Each widget is a bordered card,

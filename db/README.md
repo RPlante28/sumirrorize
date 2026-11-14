@@ -54,7 +54,7 @@ person ──< picture          any number, each labeled with its angle (front, 
 | Table | What it holds |
 |---|---|
 | `person` | `person_id`, `display_name`, and `api_key_hash`: the SHA-256 of their API key. The key itself is never stored. |
-| `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the 128 numbers `face_recognition` produces. `face_encoding` is empty if no face was found, which is common for side shots. A new upload replaces the person's whole set. |
+| `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the face's fingerprint, 128 numbers from OpenCV's SFace model. A new upload replaces the person's whole set. Only the [faces service](../backends/faces/README.md) reads or writes this table; save faces through it rather than inserting rows yourself. |
 | `widget` | The widgets the mirror offers (`clock`, `greeting`, `summary`, `weather`, `calendar`, `assignments`, `announcements`), each with a description and a default layout. |
 | `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"city": "Poughkeepsie"}`). |
 | `brightspace_session` | The person's saved Brightspace login, encrypted by d3l. Only d3l reads or writes it; ask d3l (`GET /session`) whether someone is signed in. |
@@ -78,28 +78,11 @@ INSERT INTO person (display_name, api_key_hash) VALUES ($1, $2) RETURNING person
 Make the key with `secrets.token_urlsafe(32)`, store `hashlib.sha256(key.encode()).digest()`,
 and give the key to the person once.
 
-**Upload or replace a picture set** (one transaction, so the mirror never sees half a set;
-for a brand-new person, do the sign-up insert in the same transaction):
-```sql
-BEGIN;
-DELETE FROM picture WHERE person_id = $1;
-INSERT INTO picture (person_id, angle, image, mime_type, face_encoding)
-VALUES ($1, 'front', $2, $3, $4),
-       ($1, 'left',  $5, $6, $7),
-       ($1, 'right', $8, $9, $10);   -- as many as were sent
-COMMIT;
-```
-
-**Who is at the mirror?** (closest stored face; `face_recognition` treats a distance under
-about 0.6 as the same person):
-```sql
-SELECT person_id, face_encoding <-> $1 AS distance
-FROM picture
-WHERE face_encoding IS NOT NULL
-ORDER BY distance
-LIMIT 1;
-```
-In Python, the `pgvector` package lets you pass a numpy array as `$1`.
+**Face pictures:** don't write these yourself. Send them to the faces service
+(`PUT /people/{id}/faces`), which checks each photo, makes its fingerprint, and replaces the
+person's set in one transaction. Recognition is `POST /identify` on the same service, which
+compares fingerprints by cosine similarity (pgvector's `<=>`). See
+[backends/faces/README.md](../backends/faces/README.md).
 
 **Who does this API key belong to?**
 ```sql
