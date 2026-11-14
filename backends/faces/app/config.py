@@ -1,0 +1,37 @@
+"""Settings, read from environment variables (see .env.example)."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class Settings:
+    database_url: str
+    # What the other backends (mirror, sign-up app) must send. This service handles biometric data.
+    api_key: str
+    models_dir: Path
+    # How alike two face fingerprints must be (cosine similarity) to count as the same person.
+    # 0.363 is the value recommended for this model (OpenCV's SFace).
+    match_threshold: float = 0.363
+
+
+def _required(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"{name} must be set (see .env.example)")
+    return value
+
+
+def load_settings() -> Settings:
+    api_key = _required("FACES_API_KEY")
+    if len(api_key) < 32:
+        raise RuntimeError("FACES_API_KEY must be at least 32 characters")
+    return Settings(
+        database_url=_required("DATABASE_URL"),
+        api_key=api_key,
+        models_dir=Path(os.environ.get("FACES_MODELS_DIR", "/models")),
+        match_threshold=float(os.environ.get("FACES_MATCH_THRESHOLD", "0.363")),
+    )

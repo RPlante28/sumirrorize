@@ -27,7 +27,6 @@ class WidgetPlacement:
 
 
 class Store(Protocol):
-    async def people(self) -> list[Person]: ...
     async def person(self, person_id: int) -> Optional[Person]: ...
     async def enabled_widgets(self, person_id: int) -> list[WidgetPlacement]: ...
 
@@ -45,10 +44,6 @@ class PostgresStore:
 
     async def close(self) -> None:
         await self._pool.close()
-
-    async def people(self) -> list[Person]:
-        rows = await self._pool.fetch("SELECT person_id, display_name FROM person ORDER BY display_name")
-        return [Person(r["person_id"], r["display_name"]) for r in rows]
 
     async def person(self, person_id: int) -> Optional[Person]:
         row = await self._pool.fetchrow(

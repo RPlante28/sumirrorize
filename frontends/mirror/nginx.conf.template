@@ -7,10 +7,14 @@ server {
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" always;
     add_header Referrer-Policy no-referrer always;
     add_header X-Content-Type-Options nosniff always;
+    # The page uses the webcam to recognize faces; nothing else gets camera or microphone access.
+    add_header Permissions-Policy "camera=(self), microphone=()" always;
     # Small files that change often during the hackathon: always check for a newer copy.
     add_header Cache-Control no-cache always;
 
     location /api/ {
+        # Camera frames for face recognition.
+        client_max_body_size 2m;
         proxy_pass ${MIRROR_BACKEND};
         proxy_set_header Host $host;
         proxy_read_timeout 60s;

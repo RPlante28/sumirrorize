@@ -9,3 +9,6 @@ dist/
 # keep the face stuff local
 /data/
 
+
+# OpenCV face models, downloaded by backends/faces/download-models.sh
+backends/faces/models/

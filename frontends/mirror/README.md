@@ -7,15 +7,24 @@ Live at **https://sumirrorize.marist.dev**.
 
 ## Using it
 
-1. **Connect the screen (once per device).** Open `https://sumirrorize.marist.dev/#key=<MIRROR_KEY>`.
-   The page saves the key and removes it from the address bar. Without the key it asks for one.
-   The key is in `/opt/containers/sumirrorize/.env`.
-2. **Pick who's at the mirror.** This stands in for face recognition. You can also link straight
-   to someone with `?person=<id>`. The choice is remembered.
-3. **Switch person:** move the mouse and a "Switch person" button appears in the corner, or press Esc.
+1. **Open it on the mirror computer** (the demo laptop) and allow the camera when the browser asks.
+   To skip the question next time, choose "always allow" for the site.
+2. **Walk up.** The page sends a camera frame to the server twice a second. Once it recognizes the
+   same person in 3 frames in a row (about 1.5 seconds), it shows their widgets.
+3. **Walk away.** About 8 seconds after it last recognized them, the mirror clears back to the
+   clock, and their data is removed from the page. If someone else steps up, it switches to them
+   the same way. Esc clears it right away.
 
-The data refreshes every 5 minutes. The clock and greeting update every second. If the server
-can't be reached, the last data stays up with a small notice.
+To be recognized, people need their face saved through sign-up (see
+[`backends/faces`](../../backends/faces/README.md)). The camera feed is never shown, since the
+mirror is the reflection, and frames aren't kept anywhere.
+
+The data refreshes every 5 minutes while someone stays. If the server can't be reached, the last
+data stays up with a small notice. If the camera is blocked, the page says so, with a button to
+try again.
+
+The 3-frame and 8-second rules come from the face-recog mirror script (`scripts/mirror.py`).
+They're `STABLE_MATCHES` and `SESSION_TIMEOUT_MS` at the top of `public/mirror.js`.
 
 ## How it's built
 
@@ -33,12 +42,13 @@ can't be reached, the last data stays up with a small notice.
   `db/init/004_announcements_and_layout.sql`).
 - **No HTML injection.** Brightspace text is always inserted as plain text, never as HTML.
 - **Strict page rules.** The page only loads its own files, so outside scripts like Cloudflare
-  analytics are blocked, which is fine for a page showing student data.
+  analytics are blocked, which is fine for a page showing student data. Only this page may use
+  the camera, and nothing may use the microphone.
 
 | File | What |
 |---|---|
-| `public/index.html` | The three screens: setup, pick a person, the mirror |
-| `public/mirror.js` | Everything else: key, API calls, drawing each widget, weather icons |
+| `public/index.html` | The two screens (waiting, and someone's mirror) and the hidden camera |
+| `public/mirror.js` | Everything else: camera, recognizing who's there, drawing each widget, weather icons |
 | `public/mirror.css` | The look |
 | `nginx.conf.template` | Serving the files and forwarding `/api/` |
 

@@ -236,6 +236,37 @@ class Weather:
         return response.json()
 
 
+@dataclass(frozen=True)
+class Identified:
+    faces: int                     # how many faces were in the picture
+    person_id: Optional[int]       # who it is, if recognized
+
+
+class Faces:
+    """The faces service: works out who's in a camera frame."""
+
+    def __init__(self, client: httpx.AsyncClient, base_url: str, api_key: str):
+        self._client = client
+        self._base_url = base_url
+        self._api_key = api_key
+
+    async def identify(self, image: bytes, content_type: str) -> Identified:
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/identify",
+                content=image,
+                headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": content_type},
+            )
+        except httpx.HTTPError as error:
+            raise SourceError("faces_unavailable", f"Couldn't reach the faces service: {error!r}") from error
+        if response.status_code == 400:
+            raise SourceError("bad_image", "That isn't a readable image")
+        if response.is_error:
+            raise SourceError("faces_unavailable", f"Faces service returned {response.status_code}")
+        body = response.json()
+        return Identified(body["faces"], body["match"]["personId"] if body["match"] else None)
+
+
 def _code(response: httpx.Response) -> Optional[str]:
     try:
         return response.json().get("code")

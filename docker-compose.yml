@@ -51,7 +51,22 @@ services:
     restart: unless-stopped
 
   # The mirror: docker compose --profile d3l --profile mirror up -d --build
-  # Then open http://localhost:8080/#key=<MIRROR_KEY from backends/mirror/.env>
+  # Then open http://localhost:8080 (the browser will ask for the camera).
+  # Needs FACES_API_KEY in .env (shared by mirror and faces).
+  faces:
+    profiles: [mirror]
+    build: ./backends/faces
+    environment:
+      DATABASE_URL: postgresql://sumirrorize:${POSTGRES_PASSWORD}@db:5432/sumirrorize
+      FACES_API_KEY: ${FACES_API_KEY:-}
+    ports:
+      - "127.0.0.1:${FACES_PORT:-3400}:3400"
+    read_only: true
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   mirror:
     profiles: [mirror]
     build: ./backends/mirror
@@ -60,6 +75,8 @@ services:
       DATABASE_URL: postgresql://sumirrorize:${POSTGRES_PASSWORD}@db:5432/sumirrorize
       D3L_URL: http://d3l:3100
       WEATHER_URL: http://weather:3200
+      FACES_URL: http://faces:3400
+      FACES_API_KEY: ${FACES_API_KEY:-}
     ports:
       - "127.0.0.1:${MIRROR_API_PORT:-3300}:3300"
     read_only: true
