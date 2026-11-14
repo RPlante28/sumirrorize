@@ -6,7 +6,6 @@ __pycache__/
 node_modules/
 dist/
 
-# Never commit local databases or biometric data.
-data/*
-!data/.gitkeep
+# keep the face stuff local
+/data/
 
