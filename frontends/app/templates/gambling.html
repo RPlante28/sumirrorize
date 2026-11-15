@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Play · Sumirrorize</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='gambling.css') }}">
+  <script src="{{ url_for('static', filename='gambling.js') }}" defer></script>
+</head>
+<body>
+  <header>SUMIRRORIZE</header>
+  <main>
+    <div class="container">
+  <section class="casino" aria-labelledby="casino-title">
+    <div class="casino-heading">
+      <div>
+        <p class="casino-kicker">MARIST AFTER HOURS</p>
+        <h1 id="casino-title">The Red Fox Club</h1>
+        <p class="casino-subtitle">Six games. One stack of play coins.</p>
+      </div>
+      <a class="casino-back" href="/">Back to Sumirrorize</a>
+    </div>
+
+    <div class="bankroll" aria-label="Shared play coin balance and wager">
+      <div class="balance-block">
+        <span class="control-label">YOUR PLAY COINS</span>
+        <output id="coin-balance" class="coin-balance" aria-live="polite">1,000</output>
+      </div>
+      <label class="bet-control" for="bet-amount">
+        <span class="control-label">WAGER</span>
+        <span class="bet-input-wrap"><input id="bet-amount" type="number" min="1" step="1" value="25" inputmode="numeric"><span>coins</span></span>
+      </label>
+      <button id="reset-coins" class="reset-coins" type="button" title="Reset play coins">Reset balance</button>
+    </div>
+    <p class="local-note">Play coins have no cash value and stay in this browser.</p>
+
+    <nav class="game-nav" aria-label="Choose a game">
+      <button type="button" data-game-index="0" aria-current="true"><span>01</span> Flip</button>
+      <button type="button" data-game-index="1"><span>02</span> Slots</button>
+      <button type="button" data-game-index="2"><span>03</span> Racing</button>
+      <button type="button" data-game-index="3"><span>04</span> Pachinko</button>
+      <button type="button" data-game-index="4"><span>05</span> Rocket</button>
+      <button type="button" data-game-index="5"><span>06</span> Craps</button>
+    </nav>
+
+    <div class="game-toolbar">
+      <button class="step-game" type="button" data-step="-1" aria-label="Previous game">←</button>
+      <span id="game-position" aria-live="polite">01 / 06</span>
+      <button class="step-game" type="button" data-step="1" aria-label="Next game">→</button>
+      <span class="swipe-hint">Swipe to switch games</span>
+    </div>
+
+    <div class="game-window" id="game-window">
+      <div class="game-track" id="game-track">
+        <article class="game-panel" aria-labelledby="flip-title">
+          <div class="game-intro"><span class="game-index">01 / CHANCE</span><h2 id="flip-title">Coin flip</h2><p>Call it. A correct call returns double your wager.</p></div>
+          <div class="flip-stage"><div class="coin-art" id="coin-art" aria-hidden="true">M</div><p id="flip-result" class="game-result" aria-live="polite">Choose a side to begin.</p></div>
+          <div class="choice-row"><button class="game-action" type="button" data-flip="heads">Heads</button><button class="game-action" type="button" data-flip="tails">Tails</button></div>
+        </article>
+
+        <article class="game-panel" aria-labelledby="slots-title">
+          <div class="game-intro"><span class="game-index">02 / REELS</span><h2 id="slots-title">Fox den slots</h2><p>Three matching symbols pays 4×. Two matching symbols pays 1×.</p></div>
+          <div class="slot-reels" id="slot-reels" aria-label="Slot machine symbols">
+            <div class="slot-reel" data-reel="0">M</div><div class="slot-reel" data-reel="1">FOX</div><div class="slot-reel" data-reel="2">RED</div>
+          </div>
+          <p id="slots-result" class="game-result" aria-live="polite">The house is a long walk from campus.</p>
+          <div class="game-actions"><button id="spin-slots" class="game-action game-action-primary" type="button">Spin reels</button>
+            <label class="upload-symbols" for="slot-images">Customize reel images<input id="slot-images" type="file" accept="image/*" multiple></label>
+          </div>
+          <p class="fine-print">Upload up to 5 images. They are resized and saved in this browser only.</p>
+        </article>
+
+        <article class="game-panel" aria-labelledby="racing-title">
+          <div class="game-intro"><span class="game-index">03 / TRACK</span><h2 id="racing-title">Horse racing</h2><p>Pick a runner. Longer odds pay more when they finish first.</p></div>
+          <label class="field-label" for="horse-pick">Your runner</label>
+          <select id="horse-pick" class="game-select"><option value="0">Red Fox · 2×</option><option value="1">North Poughkeepsie · 3×</option><option value="2">River Runner · 4×</option><option value="3">The 845 · 5×</option></select>
+          <div class="race-track" id="race-track" aria-label="Race progress">
+            <div class="race-lane"><span>FOX</span><i></i></div><div class="race-lane"><span>NORTH</span><i></i></div><div class="race-lane"><span>RIVER</span><i></i></div><div class="race-lane"><span>845</span><i></i></div>
+          </div>
+          <p id="racing-result" class="game-result" aria-live="polite">Runners to the post.</p>
+          <button id="start-race" class="game-action game-action-primary" type="button">Place wager & race</button>
+        </article>
+
+        <article class="game-panel" aria-labelledby="pachinko-title">
+          <div class="game-intro"><span class="game-index">04 / DROP</span><h2 id="pachinko-title">Pachinko</h2><p>Drop a ball through the pins and see where it lands.</p></div>
+          <div class="pachinko-board" id="pachinko-board" aria-label="Pachinko board">
+            <div class="peg-row"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="peg-row"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="peg-row"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="peg-row"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="pachinko-ball" id="pachinko-ball" aria-hidden="true"></div>
+            <div class="pachinko-bins"><span>0×</span><span>½×</span><span>1×</span><span>2×</span><span>5×</span><span>2×</span><span>1×</span><span>½×</span><span>0×</span></div>
+          </div>
+          <p id="pachinko-result" class="game-result" aria-live="polite">A little bounce, a little luck.</p>
+          <button id="drop-ball" class="game-action game-action-primary" type="button">Drop a ball</button>
+        </article>
+
+        <article class="game-panel" aria-labelledby="rocket-title">
+          <div class="game-intro"><span class="game-index">05 / FLIGHT</span><h2 id="rocket-title">Rocket game</h2><p>Launch, then cash out before the rocket burns out.</p></div>
+          <div class="rocket-screen" id="rocket-screen"><div class="rocket-stars" aria-hidden="true">· &nbsp; ✦ &nbsp; · &nbsp; · &nbsp; ✦</div><div class="rocket-multiplier" id="rocket-multiplier">1.00×</div><div class="rocket-icon" id="rocket-icon" aria-hidden="true">↗</div><p id="rocket-result" class="game-result" aria-live="polite">Ready for launch.</p></div>
+          <div class="game-actions"><button id="launch-rocket" class="game-action game-action-primary" type="button">Launch & wager</button><button id="cash-out" class="game-action" type="button" disabled>Cash out</button></div>
+        </article>
+
+        <article class="game-panel" aria-labelledby="craps-title">
+          <div class="game-intro"><span class="game-index">06 / DICE</span><h2 id="craps-title">Craps</h2><p>Pass line rules: 7 or 11 wins on the come-out roll; 2, 3, or 12 loses.</p></div>
+          <div class="dice-stage"><div class="die" id="die-one">⚀</div><div class="die" id="die-two">⚁</div></div>
+          <p id="craps-result" class="game-result" aria-live="polite">Roll the dice to start.</p>
+          <button id="roll-dice" class="game-action game-action-primary" type="button">Roll dice</button>
+        </article>
+      </div>
+    </div>
+    <p id="casino-message" class="casino-message" role="status" aria-live="polite"></p>
+  </section>
+    </div>
+  </main>
+  <footer><img class="footer-img" src="{{ url_for('static', filename='img/OurLogo.png') }}" alt="Sumirrorize logo"></footer>
+</body>
+</html>

@@ -85,9 +85,11 @@ a listed tester before they could sign in at all.
 
 ## Routes
 
-Pages: `/` (sign-in, or settings once signed in), `/faces` (face pictures), and `/privacy` and
-`/terms`, which anyone can open. Google's OAuth consent screen asks for those three links (home
-page, privacy policy, terms of service). `APP_CONTACT_EMAIL` sets the contact shown on them.
+Pages: `/` (sign-in, or settings once signed in), `/faces` (face pictures), `/gambling` (local
+play-coin games), and `/privacy` and `/terms`, which anyone can open. The games keep their balance
+and optional slot images in the browser's local storage; they do not call the backend. Google's
+OAuth consent screen asks for the home page, privacy policy, and terms of service. `APP_CONTACT_EMAIL`
+sets the contact shown on them.
 
 The pages call these, with the login cookie. Errors look like `{"error": "...", "code": "..."}`.
 

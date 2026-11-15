@@ -44,7 +44,7 @@ class GoogleAccount:
 
 
 class Google(Protocol):
-    def start(self, redirect_uri: str, calendar: bool = False, ask_again: bool = False) -> Response: ...
+    def start(self, redirect_uri: str, ask_again: bool = False) -> Response: ...
     def finish(self) -> GoogleAccount: ...
     def revoke(self, refresh_token: str) -> None: ...
 
@@ -58,17 +58,15 @@ class AuthlibGoogle:
             client_id=settings.google_client_id,
             client_secret=settings.google_client_secret,
             server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-            # who they are and their name. no email
-            client_kwargs={"scope": "openid profile"},
+            # who they are, their name, and their calendar events. no email
+            client_kwargs={"scope": f"openid profile {CALENDAR_SCOPE}"},
         )
 
-    def start(self, redirect_uri: str, calendar: bool = False, ask_again: bool = False) -> Response:
-        if not calendar:
-            return self._client.authorize_redirect(redirect_uri)
+    def start(self, redirect_uri: str, ask_again: bool = False) -> Response:
         # "offline" gets us a refresh token, so the mirror can read the calendar when they're not
         # signed in here. Google only sends it when it asks the person, which it does the first
         # time, and again whenever prompt=consent.
-        extra = {"scope": f"openid profile {CALENDAR_SCOPE}", "access_type": "offline"}
+        extra = {"access_type": "offline", "include_granted_scopes": "true"}
         if ask_again:
             extra["prompt"] = "consent"
         return self._client.authorize_redirect(redirect_uri, **extra)
@@ -213,20 +211,15 @@ def create_app(
                                calendar=db.calendar_token(person.id) is not None,
                                units=db.units(person.id), api_url=settings.d3l_public_url)
 
+    @app.get("/gambling")
+    def gambling():
+        return render_template("gambling.html")
+
     @app.get("/faces")
     @login_required
     def face_pictures():
         return render_template("faceregistration.html")
 
-    # public, no sign-in needed: Google's OAuth consent screen links to these
-
-    @app.get("/privacy")
-    def privacy():
-        return render_template("privacy.html", contact_email=settings.contact_email)
-
-    @app.get("/terms")
-    def terms():
-        return render_template("terms.html", contact_email=settings.contact_email)
     @app.get("/layout")
     @login_required
     def layout():
@@ -236,11 +229,8 @@ def create_app(
 
     @app.get("/login")
     def login():
-        # ?calendar=1 is the "Connect Google Calendar" button: ask for the calendar, and make Google
-        # show its permission screen even if it has before
-        connect = request.args.get("calendar") == "1"
-        return google.start(f"{settings.public_url}/login/callback",
-                            calendar=connect or settings.calendar_at_sign_in, ask_again=connect)
+        # ?calendar=1 is the "Connect Google Calendar" button: make Google ask again
+        return google.start(f"{settings.public_url}/login/callback", ask_again=request.args.get("calendar") == "1")
 
     @app.get("/login/callback")
     def login_callback():
