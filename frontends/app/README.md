@@ -2,13 +2,13 @@
 
 Where people set up their mirror, at **https://sumirrorize-api.marist.dev**. They:
 
-1. **Sign in with Google.** Their first sign-in creates them in the database. Google also asks
-   whether Sumirrorize may see their calendar events, so the mirror can show them.
+1. **Sign in with Google.** Their first sign-in creates them in the database.
 2. **Take pictures of their face** from five angles (front, left, right, up, down). The faces
    service checks each one, and if one isn't good enough (too dark, too far away, nobody in it,
    someone else in it), the page says which to retake and why.
 3. **Connect Brightspace.** This opens d3l's sign-in tab, where they sign in to Marist as usual.
-4. **Pick their settings:** weather in Fahrenheit or Celsius, and an API key for their own apps if they want one.
+4. **Connect Google Calendar** (optional), so their own events show next to Brightspace's.
+5. **Pick their settings:** weather in Fahrenheit or Celsius, and an API key for their own apps if they want one.
 
 After that, stepping up to the mirror at https://sumirrorize.marist.dev shows their day.
 
@@ -57,23 +57,31 @@ set -a && . ./.env && set +a && .venv/bin/flask --app 'app.main:create_app()' ru
 The Google OAuth client (Google Cloud Console -> APIs & Services -> Credentials) must list
 `<APP_PUBLIC_URL>/login/callback` as an authorized redirect URI: on the server,
 `https://sumirrorize-api.marist.dev/login/callback`, and `http://localhost:3500/login/callback`
-for running locally. The app asks Google for the account's ID and name (not their email) and
-for read-only access to their calendar events.
+for running locally. Signing in only asks Google for the account's ID and name, not their email.
 
 ### Google Calendar
 
-Signing in also asks for `calendar.events.readonly`. For that to work, the Google Cloud project
-needs the **Google Calendar API enabled** (APIs & Services -> Library) and the scope added to the
-OAuth consent screen. Until Google has verified the app, people see a "Google hasn't verified
-this app" page first and have to click through it.
+The **Connect Google Calendar** button on the settings page sends the person back to Google,
+which asks whether Sumirrorize may read their calendar events (`calendar.events.readonly`).
 
 - If they agree, Google hands over a *refresh token*, which the app encrypts with
   `GOOGLE_TOKEN_KEY` and saves in the `google_calendar` table. The mirror backend has the same
   key and uses the token to read their main calendar.
-- Google only hands the token over when it has just asked the person. So someone who said no,
-  or disconnected, uses the **Connect Google Calendar** button on the settings page, which
-  makes Google ask again.
 - **Disconnect** tells Google to take the access away and deletes the saved token.
+
+The Google Cloud project needs the **Google Calendar API enabled** (APIs & Services -> Library)
+and the scope added under Google Auth Platform -> Data access. Who can connect depends on the
+app's publishing status (Google Auth Platform -> Audience):
+
+- **Testing:** only accounts listed there as test users. Everyone else gets "has not completed
+  the Google verification process". Tokens also stop working after 7 days, so calendars need
+  reconnecting weekly.
+- **In production:** anyone, after clicking through a "Google hasn't verified this app" page
+  (up to 100 people until Google verifies it). Tokens don't expire.
+
+`GOOGLE_CALENDAR_AT_SIGN_IN=true` asks for the calendar at every sign-in instead of only from
+the button. Leave it off while the app is in testing: Google would turn away everyone who isn't
+a listed tester before they could sign in at all.
 
 ## Routes
 
