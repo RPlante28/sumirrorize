@@ -1,12 +1,8 @@
-"""
-The mirror's backend. Run with:
-    uvicorn --factory app.main:create_app --port 3300
-
-Your face is the key: the mirror page sends camera frames to /api/identify. Once the faces
-service recognizes someone and the server has seen them blink (so a photo of them won't do), the
-page gets a short-lived pass for loading their widgets from /api/mirror. There's no other way to
-get a person's data from here.
-"""
+# The mirror's backend.
+# run: uvicorn --factory app.main:create_app --port 3300
+#
+# The page sends camera frames to /api/identify. Once faces recognizes someone and we've seen
+# them blink, the page gets a short-lived pass. That pass is the only way to load their widgets.
 
 from __future__ import annotations
 
@@ -23,6 +19,7 @@ from fastapi.responses import JSONResponse
 from . import widgets
 from .blink import BlinkCheck
 from .config import Settings, load_settings
+from .google import GoogleCalendar
 from .passes import Passes, Signer
 from .ratelimit import RateLimiter, client_address
 from .sources import D3l, Faces, SourceError, Weather
@@ -30,9 +27,9 @@ from .store import PostgresStore, Store
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-PASS_LIFETIME = 120            # seconds; the page renews it on every recognition
-# How often one address may ask "who is this?". A mirror asks about twice a second, and several
-# times a second for the moment it's waiting for a blink. A shared wifi network is one address.
+PASS_LIFETIME = 120  # seconds, renewed on every recognition
+# Per address. A mirror sends about 2 frames a second, up to 10 while waiting for a blink.
+# Everyone on the same wifi usually shares one address.
 IDENTIFY_PER_SECOND = 12
 IDENTIFY_BURST = 40
 MAX_FRAME_BYTES = 2 * 1024 * 1024
@@ -50,7 +47,7 @@ def create_app(
     store: Optional[Store] = None,
     transport: Optional[httpx.AsyncBaseTransport] = None,
 ) -> FastAPI:
-    """`store` and `transport` let tests swap in a fake database and fake backends."""
+    """`store` and `transport` are for tests."""
     settings = settings or load_settings()
     signer = Signer()
     passes = Passes(signer, PASS_LIFETIME)
@@ -64,6 +61,7 @@ def create_app(
             app.state.store = db
             app.state.d3l = D3l(client, settings.d3l_url, settings.d3l_service_key)
             app.state.weather = Weather(client, settings.weather_url)
+            app.state.google = GoogleCalendar(client, db, settings)
             app.state.faces = Faces(client, settings.faces_url, settings.faces_api_key)
             yield
         if isinstance(db, PostgresStore):
@@ -87,12 +85,9 @@ def create_app(
     @app.post("/api/identify")
     async def identify(request: Request):
         """
-        Who's at the mirror? Send one camera frame as the body (image/jpeg). The answer says who
-        was recognized, and once they've blinked it includes a pass for /api/mirror.
-
-        Until then it includes `blink`, their progress towards a blink: send it back with the
-        next frame in an X-Blink header. Sending the current pass (Authorization: Bearer) while
-        the same person is still there swaps it for a fresh one without another blink.
+        Who's at the mirror? Body: one camera frame (image/jpeg). Once they've blinked, the answer
+        has a pass for /api/mirror. Until then it has `blink`: send it back with the next frame
+        as X-Blink. Sending the current pass keeps it fresh while they stay.
         """
         if not limiter.allow(client_address(request)):
             raise ApiError(429, "Too many requests, slow down", "rate_limited")
@@ -116,7 +111,7 @@ def create_app(
         answer["person"] = {"id": person.id, "name": person.name}
 
         progress = None
-        blinked = pass_holder(request) == person.id   # already let in, and still here
+        blinked = pass_holder(request) == person.id  # already let in and still here
         if not blinked:
             blinked, progress = blink.step(request.headers.get("x-blink"), person.id, found.eyes_open, time.time())
         if blinked:
@@ -126,7 +121,7 @@ def create_app(
 
     @app.get("/api/mirror")
     async def mirror(request: Request, person_id: int = Depends(person_with_pass)):
-        """Everything the recognized person's mirror shows: their enabled widgets, placed, with data."""
+        """The person's enabled widgets, placed, with data."""
         state = request.app.state
         person = await state.store.person(person_id)
         if not person:
@@ -136,7 +131,7 @@ def create_app(
             "person": {"id": person.id, "name": person.name},
             "timezone": settings.timezone.key,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
-            "widgets": await widgets.build(person, placements, state.d3l, state.weather, settings.timezone),
+            "widgets": await widgets.build(person, placements, state.d3l, state.weather, state.google, settings.timezone),
         }
 
     @app.get("/api/health")

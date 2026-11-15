@@ -1,9 +1,5 @@
-"""
-Active weather alerts from the National Weather Service (US only).
-Free, no API key. Docs: https://www.weather.gov/documentation/services-web-api
-
-Adapted from StormWatch's api/nws.py, minus the storm polygons and distance math.
-"""
+# Active alerts from the National Weather Service (US only, no API key).
+# Adapted from StormWatch's api/nws.py. Docs: https://www.weather.gov/documentation/services-web-api
 
 from __future__ import annotations
 
@@ -15,7 +11,7 @@ import httpx
 
 URL = "https://api.weather.gov/alerts/active"
 
-# Most serious first.
+# most serious first
 _SEVERITY = {"Extreme": 4, "Severe": 3, "Moderate": 2, "Minor": 1}
 _URGENCY = {"Immediate": 3, "Expected": 2, "Future": 1, "Past": 0}
 
@@ -55,7 +51,7 @@ async def fetch_alerts(client: httpx.AsyncClient, latitude: float, longitude: fl
             urgency=p.get("urgency") or "Unknown",
             area=p.get("areaDesc") or "",
             starts=_time(p.get("onset") or p.get("effective")),
-            # "ends" is when the weather ends; "expires" is when this message does.
+            # "ends" = the weather ends, "expires" = this message does
             ends=_time(p.get("ends") or p.get("expires")),
             description=p.get("description") or "",
             instruction=p.get("instruction") or "",

@@ -7,13 +7,12 @@ function sha256(value: string): Buffer {
   return createHash("sha256").update(value).digest();
 }
 
-// Hashing first makes both sides the same length, which timingSafeEqual requires.
+// hash first so both sides are the same length, which timingSafeEqual needs
 const SERVICE_KEY_HASH = sha256(SERVICE_API_KEY);
 
 /**
- * Works out whose data a request is for. Two kinds of caller:
- * - a person's app, sending their own API key (stored only as a SHA-256 hash);
- * - a trusted backend (the mirror), sending SERVICE_API_KEY plus an X-Person-Id header.
+ * Whose data is this request for? Either a person's own API key (stored as a SHA-256 hash), or
+ * a trusted backend sending SERVICE_API_KEY plus X-Person-Id.
  */
 export async function identifyPerson(authorization?: string, personHeader?: string): Promise<number> {
   const key = authorization?.match(/^Bearer (.+)$/)?.[1];

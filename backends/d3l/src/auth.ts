@@ -6,16 +6,15 @@ import { forgetSession, loadCookies, peopleWithSessions, updateCookies } from ".
 
 const BASE_URL = `https://${D2L_HOST}`;
 const REFRESH_MARGIN = 5 * 60_000;
-// Brightspace ends a session after 180 idle minutes (D2L.PT.Auth.SessionTimeout.Init on
-// /d2l/home), so touching it well inside that keeps the session alive indefinitely.
+// Brightspace ends a session after 180 idle minutes, so touching it every 30 keeps it alive.
 const KEEP_ALIVE_INTERVAL = 30 * 60_000;
 const XSRF_TOKEN = /localStorage\.setItem\('XSRF\.Token','([^']+)'\)/;
-// Where Brightspace sends a browser whose session has ended.
+// where Brightspace sends a browser whose session has ended
 const LOGIN_PATH = "/d2l/login";
 
 type Token = { token: string; expiresAt: number };
 
-// Per person: their current API token, and the renewal in flight (if any).
+// per person: the current API token, and the renewal in flight if there is one
 const tokens = new Map<number, Token>();
 const renewals = new Map<number, Promise<string>>();
 
@@ -35,22 +34,16 @@ async function ask(path: string, init: RequestInit): Promise<Response> {
   }
 }
 
-/**
- * True if Brightspace answered by sending the browser to its login page, which is how it says a
- * session has ended: a small page whose script goes there (status 200), or a plain redirect.
- */
+/** True if Brightspace sent the browser to its login page, which is how it says a session has ended. */
 async function sentToLogin(response: Response): Promise<boolean> {
   if (response.headers.get("location")?.includes(LOGIN_PATH)) return true;
   return response.ok && (await response.text()).includes(LOGIN_PATH);
 }
 
 /**
- * Gets an API token the way the Brightspace web app does: session cookie plus the XSRF
- * token embedded in /d2l/home. No browser needed.
- *
- * Returns null only when Brightspace says the session has ended. If Brightspace can't be reached
- * or answers with anything else (an error or maintenance page), that says nothing about the
- * session, so this throws and the saved login is kept.
+ * Gets an API token the way the Brightspace web app does: session cookie plus the XSRF token
+ * embedded in /d2l/home. Returns null only if the session has ended. If Brightspace is down or
+ * answers with anything else, this throws and the saved login is kept.
  */
 export async function mintToken(cookies: Cookie[]): Promise<Token | null> {
   const cookie = cookieHeader(cookies);
@@ -71,7 +64,7 @@ export async function mintToken(cookies: Cookie[]): Promise<Token | null> {
     body: "scope=*:*:*",
   });
   if (!response.ok || !response.headers.get("content-type")?.includes("json")) {
-    // A rejected request comes back as the same go-to-login page, not an error status.
+    // a rejected request comes back as the go-to-login page, not an error status
     if (await sentToLogin(response)) return null;
     throw brightspaceUnavailable(`its token request answered ${response.status}`);
   }
@@ -81,9 +74,8 @@ export async function mintToken(cookies: Cookie[]): Promise<Token | null> {
 }
 
 /**
- * A fresh token for the person. Their saved login is deleted only when Brightspace says the
- * session has ended and renewing it in the background didn't work either. If Brightspace or the
- * school's login site is down, mintToken or signInSilently throws and the login is kept.
+ * A fresh token. The saved login is only deleted when the session has really ended and renewing
+ * it in the background didn't work either.
  */
 async function renewNow(personId: number): Promise<string> {
   const cookies = await loadCookies(personId);
@@ -123,7 +115,7 @@ export async function getToken(personId: number): Promise<string> {
   return renew(personId);
 }
 
-/** Drops a person's cached token, e.g. after Brightspace rejected it or they signed in again. */
+/** Drops a person's cached token. */
 export function forgetToken(personId: number): void {
   tokens.delete(personId);
 }
@@ -136,7 +128,7 @@ export function startKeepAlive(): void {
       return [];
     });
     for (const personId of people) {
-      // A signin_required failure was already logged; anything else is likely temporary.
+      // signin_required was already logged, anything else is probably temporary
       await renew(personId).catch((error) => {
         if (error.code !== "signin_required") {
           console.error(`[auth] Keep-alive for person ${personId} failed: ${error.message}`);

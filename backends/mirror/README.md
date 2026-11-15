@@ -34,7 +34,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 | `FACES_API_KEY` | The faces service's key |
 | `DATABASE_URL`, `D3L_URL`, `WEATHER_URL`, `FACES_URL` | Where the other parts are (compose fills these in) |
 | `MIRROR_TIMEZONE` | Where the mirror is, for what "today" means. Default `America/New_York` |
-| `MIRROR_EYES_OPEN_AT`, `MIRROR_EYES_CLOSED_AT` | The blink check's cutoffs on the faces service's 0–1 eye score: open at or above the first (default `0.7`), closed at or below the second (default `0.45`). Raise the second if real blinks are being missed; lower it if photos get in |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_KEY` | For Google Calendar: the sign-up app's Google client, and the key it encrypts saved calendar tokens with. Optional. Without them the calendar only shows Brightspace |
+| `MIRROR_EYES_OPEN_AT`, `MIRROR_EYES_CLOSED_AT` | The blink check's cutoffs on the faces service's 0 to 1 eye score: open at or above the first (default `0.7`), closed at or below the second (default `0.45`). Raise the second if real blinks are being missed; lower it if photos get in |
 
 ## API
 
@@ -101,10 +102,10 @@ Only enabled widgets are included. Each one's `data`:
 | `clock` | `null` (the page uses its own clock) |
 | `greeting` | `{ "name": "Alex" }`, the first word of their name |
 | `weather` | The weather service's response, in the units from the widget's `settings.units` (`imperial` by default) |
-| `calendar` | `{ "events": [{ "title", "course", "starts", "ends", "allDay", "location" }] }`: today through 6 days ahead, minus events that have ended |
+| `calendar` | `{ "events": [{ "title", "course", "starts", "ends", "allDay", "location" }] }`: today through 6 days ahead, minus events that have ended. Brightspace events and the person's Google Calendar events in one list, soonest first (`course` is `null` for Google events) |
 | `assignments` | `{ "assignments": [{ "name", "course", "due", "overdue" }] }`: overdue work first, then open upcoming work, soonest first, at most 8 |
 | `announcements` | `{ "announcements": [{ "title", "course", "posted", "text" }] }`: the last 14 days across active courses, newest first, at most 8. `text` is the start of the body on one line. A post made to several courses appears once, with `course` like `"MATH 343L, MATH 310L"` |
-| `summary` | `{ "text": "Nothing on your calendar today. 1 assignment due in the next 3 days, 2 overdue. 3 new announcements since yesterday. Overcast, high of 44°F." }` |
+| `summary` | `{ "text": "Nothing on your calendar today. 1 assignment due in the next 3 days, 2 overdue. 3 new announcements since yesterday. Overcast, high of 44F." }` |
 
 - **Errors stay contained.** A failing source only affects its own widgets: `data` becomes
   `null` and `error` explains why. The summary leaves out whatever it couldn't get. This covers
@@ -114,6 +115,10 @@ Only enabled widgets are included. Each one's `data`:
   `weather_unavailable`, `unavailable`.
 - **Fetching:** each source is fetched at most once per request, and only if an enabled widget
   needs it. The course list feeds both assignments and announcements, and is fetched once.
+- **Google Calendar:** if the person connected it in the sign-up app, their main calendar's
+  events for the same 7 days are added to the calendar. Cancelled events and invitations they
+  declined are left out. The calendar shows whatever it can get: Google events alone if
+  Brightspace isn't connected, Brightspace alone if Google is down.
 - **Announcements are per course in Brightspace,** so they take one request per active course
   (8 at a time). Courses whose access has ended are refused by Brightspace (403) and skipped.
   For a student with 27 courses this takes about half a second.
@@ -130,5 +135,6 @@ Only enabled widgets are included. Each one's `data`:
 | `app/ratelimit.py` | Limiting how fast one visitor can send frames |
 | `app/widgets.py` | Which data each widget needs, building it, and the day summary |
 | `app/sources.py` | Calling d3l, weather and faces, and trimming Brightspace's data |
+| `app/google.py` | Reading Google Calendar events |
 | `app/store.py` | Reading people and widget layouts from the database |
 | `tests/` | Tests against a fake database and fake backends |

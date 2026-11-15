@@ -11,10 +11,7 @@ async function send(url: URL, token: string): Promise<Response> {
   return fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 }
 
-/**
- * GETs a Brightspace API path (e.g. "le/1.100/123/news/") as the given person,
- * renewing their token once if Brightspace rejected it.
- */
+/** GETs a Brightspace API path (e.g. "le/1.100/123/news/") as this person. Renews their token once if rejected. */
 export async function d2lFetch(
   personId: number,
   path: string | URL,
@@ -35,7 +32,7 @@ export async function d2lFetch(
   return response;
 }
 
-/** Like d2lFetch, but parses JSON and flattens Brightspace's two paging formats into one array. */
+/** d2lFetch plus JSON, with Brightspace's two paging formats flattened into one array. */
 export async function getJson(
   personId: number,
   path: string,

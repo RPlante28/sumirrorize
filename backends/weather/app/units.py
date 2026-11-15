@@ -1,4 +1,4 @@
-"""Unit conversion. Data is fetched once in metric and converted per request."""
+# data is fetched in metric and converted per request
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ class Units(str, Enum):
 
 
 LABELS = {
-    Units.imperial: {"temperature": "°F", "speed": "mph"},
-    Units.metric: {"temperature": "°C", "speed": "km/h"},
+    Units.imperial: {"temperature": "F", "speed": "mph"},
+    Units.metric: {"temperature": "C", "speed": "km/h"},
 }
 
 _COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",

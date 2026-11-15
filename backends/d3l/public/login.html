@@ -11,13 +11,12 @@
 <body>
   <header>
     <strong>Sign in to Brightspace</strong>
-    <span id="status">Connecting…</span>
+    <span id="status">Connecting...</span>
   </header>
   <main id="stage">
     <canvas id="screen" tabindex="0" aria-label="Brightspace sign-in page"></canvas>
-    <!-- Phones only bring up their keyboard for a real text field, so taps on the picture put the
-         cursor in this invisible one (see login.js). A password field, so the keyboard doesn't
-         autocorrect or remember what's typed. -->
+    <!-- phones only show their keyboard for a real text field, so taps put the cursor in this
+         invisible one (see login.js). type=password so the keyboard doesn't autocorrect. -->
     <input id="keys" type="password" autocomplete="off" autocapitalize="off" autocorrect="off"
            spellcheck="false" enterkeyhint="go" tabindex="-1" aria-hidden="true">
     <p id="message" hidden></p>

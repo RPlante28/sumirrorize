@@ -1,6 +1,5 @@
 #!/bin/sh
-# Downloads the face models into ./models for running the service outside Docker.
-# (The Docker image downloads them itself.)
+# gets the face models into ./models, for running outside Docker
 set -e
 cd "$(dirname "$0")"
 mkdir -p models

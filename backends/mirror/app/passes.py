@@ -1,10 +1,8 @@
-"""
-Signed tokens the mirror page holds for a short while. They're signed with a secret made at
-startup, so they can't be forged and a restart cancels them all (the mirror simply earns new ones).
-
-A pass is proof that the server recognized someone's face and saw them blink a moment ago. The
-page needs it to load their data, and trades it for a fresh one each time it recognizes them again.
-"""
+# Signed tokens the mirror page holds for a short while. The secret is made at startup, so they
+# can't be forged and a restart cancels them all.
+#
+# A pass says the server recognized someone and saw them blink a moment ago. The page needs it
+# to load their data and swaps it for a fresh one each time they're recognized again.
 
 from __future__ import annotations
 
@@ -26,7 +24,7 @@ def _unb64(text: str) -> bytes:
 
 
 class Signer:
-    """Signs short pieces of text. Each token says what `kind` it is, so one kind can't pass as another."""
+    """Signs short strings. Each token carries its `kind`, so one kind can't be used as another."""
 
     def __init__(self, secret: Optional[bytes] = None):
         self._secret = secret or os.urandom(32)

@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# The face models (see README). Downloaded at build time, checked against known hashes.
+# models are downloaded at build time and checked against known hashes
 ADD --checksum=sha256:8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4 \
     https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx \
     /models/face_detection_yunet_2023mar.onnx

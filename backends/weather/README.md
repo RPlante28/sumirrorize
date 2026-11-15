@@ -31,14 +31,14 @@ cp .env.example .env && set -a && . ./.env && set +a
 
 ## `GET /weather?units=imperial`
 
-`units` is `imperial` (default; °F, mph) or `metric` (°C, km/h). Each person picks theirs in
+`units` is `imperial` (default; Fahrenheit, mph) or `metric` (Celsius, km/h). Each person picks theirs in
 their weather widget's settings, e.g. `person_widget.settings = {"units": "metric"}`. The mirror
 backend passes that setting along, using `imperial` if it isn't set.
 
 ```json
 {
   "location": { "label": "Poughkeepsie, NY", "latitude": 41.7225, "longitude": -73.9343, "timezone": "America/New_York" },
-  "units": { "temperature": "°F", "speed": "mph" },
+  "units": { "temperature": "F", "speed": "mph" },
   "current": {
     "temperature": 41.7, "feelsLike": 33.4, "humidity": 65, "windSpeed": 10.0, "windGusts": 19.9,
     "windDirection": "NW", "description": "Overcast", "weatherCode": 3, "isDay": true
@@ -81,6 +81,6 @@ backend passes that setting along, using `imperial` if it isn't set.
 | `app/open_meteo.py` | Conditions, today, and the next 12 hours (from StormWatch) |
 | `app/nws.py` | Weather alerts (from StormWatch) |
 | `app/cache.py` | Keeps the last good data, with the refresh and retry timing |
-| `app/units.py` | °C/°F, km/h/mph, compass directions |
+| `app/units.py` | C/F, km/h/mph, compass directions |
 | `app/models.py` | The response format |
 | `tests/` | Tests against fake weather APIs |
