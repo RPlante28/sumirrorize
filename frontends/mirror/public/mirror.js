@@ -223,6 +223,17 @@ const renderers = {
   },
 };
 
+function errorText(widget) {
+  if (widget.error.code === "signin_required") {
+    // the calendar can be fed by either one
+    return widget.key === "calendar"
+      ? "Connect Brightspace or Google Calendar in the app to see this."
+      : "Connect Brightspace in the app to see this.";
+  }
+  if (widget.error.code === "google_unavailable") return "Google Calendar is unavailable right now.";
+  return `${widget.name} is unavailable right now.`;
+}
+
 function renderWidget(widget) {
   // The outer box is placed and sized, the inner one holds the content (cqh/cqw text sizes only
   // measure against a parent box). The saved position goes to the stylesheet as --x, --y, --w, --h.
@@ -236,9 +247,7 @@ function renderWidget(widget) {
   const content = h("div", `widget-content w-${widget.key}`);
   const render = renderers[widget.key];
   if (widget.error) {
-    content.append(h("div", "widget-error", widget.error.code === "signin_required"
-      ? "Connect Brightspace in the app to see this."
-      : `${widget.name} is unavailable right now.`));
+    content.append(h("div", "widget-error", errorText(widget)));
   } else if (render) {
     content.append(...render(widget.data, widget.settings ?? {}).filter(Boolean));
   }

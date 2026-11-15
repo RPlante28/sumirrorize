@@ -57,7 +57,7 @@ class GoogleCalendar:
         if response.status_code == 401:
             self._access.pop(person_id, None)
         if response.is_error:
-            raise SourceError("google_unavailable", f"Google Calendar returned {response.status_code}")
+            raise SourceError("google_unavailable", f"Google Calendar returned {response.status_code}: {_reason(response)}")
 
         now = datetime.now(timezone.utc)
         found = [self._event(item) for item in response.json().get("items", []) if _going(item)]
@@ -82,7 +82,8 @@ class GoogleCalendar:
             raise SourceError("google_unavailable", f"Couldn't reach Google: {error!r}") from error
         if response.is_error:
             # invalid_grant here means they took the access away in their Google account
-            raise SourceError("google_unavailable", f"Google wouldn't renew calendar access ({response.status_code})")
+            raise SourceError("google_unavailable",
+                              f"Google wouldn't renew calendar access ({response.status_code}: {_reason(response)})")
         body = response.json()
         # a minute early, so it doesn't run out mid-request
         self._access[person_id] = (body["access_token"], time.monotonic() + body.get("expires_in", 3600) - 60)
@@ -104,6 +105,17 @@ class GoogleCalendar:
             return datetime.fromisoformat(moment["dateTime"].replace("Z", "+00:00"))
         # all-day events only have a date: midnight where the mirror is
         return datetime.combine(date.fromisoformat(moment["date"]), datetime.min.time(), tzinfo=self._zone)
+
+
+def _reason(response: httpx.Response) -> str:
+    """Google's own explanation of an error, for the log (e.g. the Calendar API isn't enabled)."""
+    try:
+        error = response.json().get("error")
+    except ValueError:
+        return "no details"
+    if isinstance(error, dict):   # the Calendar API nests it, the token endpoint doesn't
+        return str(error.get("message", "no details"))[:200]
+    return str(response.json().get("error_description") or error or "no details")[:200]
 
 
 def _going(item: dict[str, Any]) -> bool:

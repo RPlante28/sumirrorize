@@ -470,6 +470,17 @@ def test_google_down_still_shows_brightspace(backends):
     assert calendar["error"] is None and [e["title"] for e in calendar["data"]["events"]] == ["Quiz 3"]
 
 
+def test_calendar_with_nothing_to_show_says_why(backends):
+    backends.signed_in = False
+    # Brightspace isn't connected and neither is Google: ask them to connect something
+    with client_for(backends, ALL) as client:
+        assert widget(load_mirror(client), "calendar")["error"]["code"] == "signin_required"
+    # Google is connected but failing: that's the problem to report, not Brightspace
+    backends.google_up = False
+    with client_for(backends, ALL, WITH_GOOGLE) as client:
+        assert widget(load_mirror(client), "calendar")["error"]["code"] == "google_unavailable"
+
+
 def test_google_events_show_without_brightspace(backends):
     backends.signed_in = False
     with client_for(backends, ALL, WITH_GOOGLE) as client:

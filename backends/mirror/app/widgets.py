@@ -156,7 +156,9 @@ async def build(person: Person, placements: list[WidgetPlacement], d3l: D3l, wea
         failed = [errors[s] for s in NEEDS.get(p.key, set()) if s in errors]
         error = failed[0] if failed and p.key != "summary" else None
         if p.key == "calendar":
-            error = None if events is not None else errors.get("events") or errors.get("google")
+            # either source is enough. if neither came through, a connected Google Calendar that's
+            # failing is the more useful thing to report than Brightspace not being connected
+            error = None if events is not None else errors.get("google") or errors.get("events")
         widgets.append({
             "key": p.key, "name": p.name, "x": p.x, "y": p.y, "w": p.w, "h": p.h,
             "settings": p.settings,

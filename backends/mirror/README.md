@@ -112,7 +112,11 @@ Only enabled widgets are included. Each one's `data`:
   surprises too: if Brightspace sends an item in a shape the code didn't expect, the widgets
   that needed it say `unavailable`, the problem is logged, and the rest of the mirror shows.
 - **Error codes:** `signin_required` (connect Brightspace in the app), `brightspace_unavailable`,
-  `weather_unavailable`, `unavailable`.
+  `weather_unavailable`, `google_unavailable`, `unavailable`.
+- **The calendar needs only one of its two sources.** It errors only when it has nothing at all:
+  `signin_required` if neither Brightspace nor Google Calendar is connected, `google_unavailable`
+  if Google Calendar is connected but failing (the log says why, e.g. the Calendar API isn't
+  enabled in the Google project).
 - **Fetching:** each source is fetched at most once per request, and only if an enabled widget
   needs it. The course list feeds both assignments and announcements, and is fetched once.
 - **Google Calendar:** if the person connected it in the sign-up app, their main calendar's
