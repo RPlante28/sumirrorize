@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -86,11 +87,11 @@ class FakeGoogle:
     def __init__(self):
         self.account = GoogleAccount("google-alex", "Alex", calendar=True, refresh_token="alex-calendar-token")
         self.redirect_uri = None
-        self.asked_again = False
+        self.calendar = self.asked_again = False
         self.revoked: list[str] = []
 
-    def start(self, redirect_uri, ask_again=False):
-        self.redirect_uri, self.asked_again = redirect_uri, ask_again
+    def start(self, redirect_uri, calendar=False, ask_again=False):
+        self.redirect_uri, self.calendar, self.asked_again = redirect_uri, calendar, ask_again
         return redirect("https://accounts.google.com/o/oauth2/auth?fake")
 
     def revoke(self, refresh_token):
@@ -332,7 +333,7 @@ def test_delete_account_waits_for_d3l(world):
     assert 1 in store.people
 
 
-def test_calendar_connects_at_sign_in(world):
+def test_calendar_connects_when_google_sends_a_token(world):
     client, store, google, _ = world
     sign_in(client)
     sealed = store.people[1]["calendar"]
@@ -354,10 +355,19 @@ def test_calendar_not_connected_if_they_say_no(world):
     page = client.get("/").get_data(as_text=True)
     assert "Connect Google Calendar" in page and "/login?calendar=1" in page
 
-    client.get("/login?calendar=1")
-    assert google.asked_again is True
+    # plain sign-in only asks who they are. the Connect button asks for the calendar
     client.get("/login")
-    assert google.asked_again is False
+    assert (google.calendar, google.asked_again) == (False, False)
+    client.get("/login?calendar=1")
+    assert (google.calendar, google.asked_again) == (True, True)
+
+
+def test_calendar_can_be_asked_for_at_every_sign_in():
+    google = FakeGoogle()
+    app = create_app(replace(SETTINGS, calendar_at_sign_in=True), store=FakeStore(), google=google,
+                     transport=httpx.MockTransport(FakeServices()))
+    app.test_client().get("/login")
+    assert (google.calendar, google.asked_again) == (True, False)
 
 
 def test_disconnect_calendar(world):
@@ -373,6 +383,24 @@ def test_deleting_account_drops_calendar_access(world):
     sign_in(client)
     assert send(client, "DELETE", "/me").status_code == 204
     assert google.revoked == ["alex-calendar-token"] and store.people == {}
+
+
+def test_privacy_and_terms_are_public(world):
+    client, *_ = world
+    privacy = client.get("/privacy")
+    assert privacy.status_code == 200
+    text = privacy.get_data(as_text=True)
+    assert "Google API Services" in text and "Limited Use" in text and "Delete my account" in text
+    assert client.get("/terms").status_code == 200 and b"Terms of Service" in client.get("/terms").data
+    # the sign-in page links to both, which Google checks for
+    home = client.get("/").get_data(as_text=True)
+    assert 'href="/privacy"' in home and 'href="/terms"' in home
+
+
+def test_contact_email_is_shown_when_set():
+    app = create_app(replace(SETTINGS, contact_email="team@mirror.example"), store=FakeStore(), google=FakeGoogle(),
+                     transport=httpx.MockTransport(FakeServices()))
+    assert b"mailto:team@mirror.example" in app.test_client().get("/privacy").data
 
 
 def test_security_headers(world):

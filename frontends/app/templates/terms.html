@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Terms of Service | Sumirrorize{% endblock %}
+{% block content %}
+<div class="legal">
+  <h1>Terms of Service</h1>
+  <p class="description">Last updated November 15, 2026</p>
+
+  <p>Sumirrorize is a smart mirror built by students at Marist University for a hackathon. By
+    signing in you agree to these terms. If you don't, please don't use it.</p>
+
+  <h2>A student project</h2>
+  <p>Sumirrorize isn't run or endorsed by Marist University, D2L (Brightspace) or Google. It's
+    offered as it is, with no promises: it may be wrong, slow or offline, and it may be shut down
+    at any time, in which case everything saved for you is deleted. Don't rely on it for
+    deadlines. Brightspace is the real record of your classes and due dates.</p>
+
+  <h2>Your accounts</h2>
+  <ul>
+    <li>Only connect accounts that are yours: your own Google account and your own Marist login.</li>
+    <li>Only sign up with pictures of your own face.</li>
+    <li>Connecting Brightspace means signing in to Marist through a browser on our server, and
+      letting Sumirrorize read your Brightspace information for you. It's up to you to make sure
+      that's allowed by your school's rules.</li>
+  </ul>
+
+  <h2>What shows on the mirror</h2>
+  <p>Once the mirror recognizes you and sees you blink, it shows your information on its screen,
+    where people standing nearby can read it. The blink check stops a photo of you from opening
+    your mirror, but it isn't strong security.</p>
+
+  <h2>Fair use</h2>
+  <p>Don't try to get at other people's information, break the service, or use it to do anything
+    illegal. We can remove an account that does.</p>
+
+  <h2>Your information</h2>
+  <p>What we keep and why is in the <a href="{{ url_for('privacy') }}">Privacy Policy</a>. You can
+    disconnect your accounts or delete everything from your settings page whenever you like.</p>
+
+  <h2>Changes</h2>
+  <p>If these terms change, the new version will be posted here with a new date.</p>
+
+  <h2>Contact</h2>
+  {% include "contact.html" %}
+</div>
+{% endblock %}
