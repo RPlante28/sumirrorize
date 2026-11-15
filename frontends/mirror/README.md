@@ -16,8 +16,9 @@ Live at **https://sumirrorize.marist.dev**.
    the same way. Esc clears it right away.
 
 To be recognized, people need their face saved through sign-up (see
-[`backends/faces`](../../backends/faces/README.md)). The camera feed is never shown, since the
-mirror is the reflection, and frames aren't kept anywhere.
+[`backends/faces`](../../backends/faces/README.md)). The camera's live view fills the screen,
+flipped like a mirror, with the widgets on top as dark see-through cards. Frames aren't kept
+anywhere.
 
 The data refreshes every 5 minutes while someone stays. If the server can't be reached, the last
 data stays up with a small notice. If the camera is blocked, the page says so, with a button to
@@ -47,7 +48,7 @@ They're `STABLE_MATCHES` and `SESSION_TIMEOUT_MS` at the top of `public/mirror.j
 
 | File | What |
 |---|---|
-| `public/index.html` | The two screens (waiting, and someone's mirror) and the hidden camera |
+| `public/index.html` | The two screens (waiting, and someone's mirror) and the camera view behind them |
 | `public/mirror.js` | Everything else: camera, recognizing who's there, drawing each widget, weather icons |
 | `public/mirror.css` | The look |
 | `nginx.conf.template` | Serving the files and forwarding `/api/` |

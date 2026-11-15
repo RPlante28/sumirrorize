@@ -1,6 +1,6 @@
 // The mirror display. Your face is the key: the page watches the webcam, sends a frame to the
 // server twice a second, and shows the widgets of whoever it recognizes. When they leave, it
-// clears. The camera feed is never shown and frames aren't kept.
+// clears. The camera's live view, flipped like a mirror, is the background. Frames aren't kept.
 
 const REFRESH_MS = 5 * 60_000;      // widget data refresh while someone stays
 const IDENTIFY_EVERY_MS = 500;
