@@ -1,5 +1,5 @@
 // Shows the browser d3l is running for this sign-in and sends clicks and typing back to it.
-// Positions are sent as fractions (0-1) of the picture, so window scaling doesn't matter.
+// Positions go as fractions (0-1) of the picture, so scaling doesn't matter.
 
 const stage = document.getElementById("stage");
 const canvas = document.getElementById("screen");
@@ -28,7 +28,7 @@ function finish(text, ok = false) {
 
 // --- Screen ---
 
-// Frames are decoded asynchronously; drop any that finish after a newer one was drawn.
+// frames decode asynchronously, drop any that finish after a newer one was drawn
 let frameCount = 0;
 let drawnFrame = 0;
 
@@ -60,7 +60,7 @@ socket.addEventListener("message", (event) => {
   const { type } = JSON.parse(event.data);
   if (type === "done") {
     finish("You're signed in. You can close this tab.", true);
-    // Only works when the app opened this tab itself, which is the normal case.
+    // only works when the app opened this tab itself, which is the normal case
     setTimeout(() => window.close(), 1500);
   } else if (type === "expired") {
     finish("This sign-in timed out. Start again from the app.");
@@ -76,7 +76,7 @@ socket.addEventListener("close", (event) => {
   );
 });
 
-// Match the remote browser to this window so the picture is sharp and 1:1.
+// match the remote browser to this window so the picture is 1:1
 let resizeTimer;
 function sendSize() {
   send({ type: "resize", width: stage.clientWidth, height: stage.clientHeight });
@@ -115,7 +115,7 @@ canvas.addEventListener("pointerup", (event) => {
   send({ type: "up", ...position(event), button: BUTTONS[event.button] });
 });
 
-// Moves are sent at most once per animation frame.
+// at most one move per animation frame
 let pendingMove = null;
 canvas.addEventListener("pointermove", (event) => {
   if (event.pointerType === "touch") {
@@ -139,8 +139,8 @@ canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
 // --- Touch: a tap is a click, a drag scrolls ---
 
-const DRAG_STARTS_AFTER = 10; // pixels a finger can wobble and still count as a tap
-let touch = null;             // the finger on the screen: where it started and where it was last
+const DRAG_STARTS_AFTER = 10;  // pixels a finger can wobble and still be a tap
+let touch = null;  // the finger on the screen
 
 function startTouch(event) {
   touch = { id: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, dragging: false };
@@ -151,7 +151,7 @@ function moveTouch(event) {
   if (event.pointerId !== touch?.id) return;
   if (!touch.dragging && Math.hypot(event.clientX - touch.startX, event.clientY - touch.startY) < DRAG_STARTS_AFTER) return;
   touch.dragging = true;
-  // The picture may be shown smaller than the remote page really is; scroll in the page's pixels.
+  // the picture may be shown smaller than the remote page, so scroll in the page's pixels
   const scale = canvas.width / canvas.getBoundingClientRect().width;
   send({ type: "wheel", ...position(event), dx: (touch.x - event.clientX) * scale, dy: (touch.y - event.clientY) * scale });
   touch.x = event.clientX;
@@ -176,7 +176,7 @@ canvas.addEventListener("pointercancel", () => {
 // --- Keyboard ---
 
 canvas.addEventListener("keydown", (event) => {
-  // Let Ctrl/Cmd+V through so the paste event below fires (for password managers).
+  // let Ctrl/Cmd+V through so the paste event below fires
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") return;
   event.preventDefault();
   send({
@@ -196,19 +196,18 @@ document.addEventListener("paste", (event) => {
 });
 
 // --- Phone keyboards ---
-//
 // A phone only shows its keyboard for a real text field, and what it types often doesn't arrive
-// as key presses. So a tap puts the cursor in an invisible field (#keys), and whatever changes in
-// that field is passed on: new characters are typed, removed ones become Backspace.
+// as key presses. So a tap puts the cursor in an invisible field (#keys) and changes to that
+// field are passed on: new characters are typed, removed ones become Backspace.
 
-// The field always holds this, so there's something for Backspace to delete.
+// always in the field, so Backspace has something to delete
 const FILLER = "  ";
 let typed = FILLER;
 keys.value = FILLER;
 
-/** Brings up the keyboard. Must be called while handling a tap, or phones ignore it. */
+// has to run while handling a tap, or phones ignore it
 function showKeyboard(event) {
-  // Sitting where the tap was, the phone scrolls that spot into view above its keyboard.
+  // placed where the tap was, so the phone scrolls that spot above its keyboard
   keys.style.left = `${event.clientX}px`;
   keys.style.top = `${event.clientY}px`;
   keys.focus();
@@ -221,8 +220,8 @@ keys.addEventListener("input", (event) => {
   for (let i = same; i < typed.length; i++) send({ type: "key", key: "Backspace" });
   const added = now.slice(same);
   if (added.length === 1) send({ type: "key", key: added });
-  else if (added) send({ type: "text", text: added }); // a suggestion, autofill or paste
-  // Some keyboards build a word up in the field before settling on it; leave it alone meanwhile.
+  else if (added) send({ type: "text", text: added });  // suggestion, autofill or paste
+  // some keyboards build a word up in the field before settling on it
   if (event.isComposing) {
     typed = now;
   } else {
@@ -235,7 +234,7 @@ keys.addEventListener("compositionend", () => {
 });
 
 keys.addEventListener("keydown", (event) => {
-  // Characters and Backspace show up as changes to the field (above). Named keys don't.
+  // characters and Backspace show up as field changes (above), named keys don't
   if (event.key.length === 1 || ["Backspace", "Unidentified", "Process", "Dead"].includes(event.key)) return;
   event.preventDefault();
   send({ type: "key", key: event.key, ctrl: event.ctrlKey, alt: event.altKey, meta: event.metaKey, shift: event.shiftKey });

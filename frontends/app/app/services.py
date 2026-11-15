@@ -1,4 +1,4 @@
-"""The two internal services the app calls: d3l (Brightspace) and faces."""
+# the two internal services the app calls: d3l (Brightspace) and faces
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import httpx
 
 
 class ServiceError(Exception):
-    """A service said no, or couldn't be reached. Carries what to tell the browser."""
+    """A service said no or couldn't be reached. Carries what to tell the browser."""
 
     def __init__(self, status: int, message: str, code: str, **extra: Any):
         super().__init__(message)
@@ -26,7 +26,7 @@ def _send(client: httpx.Client, name: str, method: str, url: str, **kwargs: Any)
                            f"{name}_unavailable") from None
     if response.is_success:
         return response
-    # Services answer errors with {"error": "...", "code": "...", ...anything else to pass on}.
+    # services answer errors with {"error", "code", ...anything else to pass on}
     try:
         body = response.json()
         message, code = body.pop("error"), body.pop("code")
@@ -36,7 +36,7 @@ def _send(client: httpx.Client, name: str, method: str, url: str, **kwargs: Any)
 
 
 class D3l:
-    """Brightspace sign-in, as a trusted backend acting for one person."""
+    """Brightspace sign-in, acting for one person."""
 
     def __init__(self, client: httpx.Client, base_url: str, service_key: str):
         self._client = client
@@ -66,12 +66,12 @@ class Faces:
         self._headers = {"Authorization": f"Bearer {api_key}"}
 
     def saved(self, person_id: int) -> list[dict[str, Any]]:
-        """The angles and dates of the person's saved pictures (not the pictures)."""
+        """Angles and dates of the saved pictures, not the pictures."""
         url = f"{self._base_url}/people/{person_id}/faces"
         return _send(self._client, "faces", "GET", url, headers=self._headers).json()["pictures"]
 
     def save(self, person_id: int, pictures: list[dict[str, str]]) -> dict[str, Any]:
-        """Replaces the person's pictures. A poor picture raises `poor_pictures` with which to retake."""
+        """Replaces the person's pictures. Raises `poor_pictures` if some need retaking."""
         url = f"{self._base_url}/people/{person_id}/faces"
         return _send(self._client, "faces", "PUT", url, headers=self._headers,
                      json={"pictures": pictures}).json()

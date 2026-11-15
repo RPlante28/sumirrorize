@@ -13,11 +13,11 @@ and deploy it, what the frontends need to do, and the drawbacks.
 ## How it fits together
 
 ```
- phone-app frontend ──(person's API key)──┐
-                                          ├──> d3l ──> brightspace.marist.edu
- mirror backend ──(service key + id)──────┘     │
-        │                                       │
-        └──────────────> Postgres <─────────────┘
+ phone-app frontend --(person's API key)--+
+                                          +--> d3l --> brightspace.marist.edu
+ mirror backend --(service key + id)------+     |
+        |                                       |
+        +--------------> Postgres <-------------+
                  people, pictures, widgets,
                  saved Brightspace logins (encrypted)
 ```
@@ -60,7 +60,7 @@ checkout at `/home/nathan1/projects/sumirrorize`.
 | Container | What | Reachable at |
 |---|---|---|
 | `sumirrorize-db` | Postgres + pgvector | `sumirrorize-db:5432` on the `sumirrorize` Docker network only |
-| `sumirrorize-d3l` | d3l | `https://sumirrorize-api.marist.dev/api` (Cloudflare tunnel → Traefik), and `http://sumirrorize-d3l:3100` on the `sumirrorize` network |
+| `sumirrorize-d3l` | d3l | `https://sumirrorize-api.marist.dev/api` (Cloudflare tunnel -> Traefik), and `http://sumirrorize-d3l:3100` on the `sumirrorize` network |
 
 - **Public hostname:** `sumirrorize-api.marist.dev` needs a Public Hostname in the Cloudflare
   tunnel pointing at `http://traefik:80`, like every other site. Traefik picks the route up from

@@ -1,13 +1,12 @@
 """
-Save someone's face from photo files, through the same route the sign-up app uses. For testing
-with photos taken elsewhere. The faces container is read-only, so run this from a
-throwaway container on the same network with the photos mounted:
+Saves someone's face from photo files, through the same route the sign-up app uses. For testing.
+The faces container is read-only, so run it from a throwaway container with the photos mounted:
 
     docker run --rm --network sumirrorize -v /path/to/photos:/photos:ro \
       -e FACES_URL=http://sumirrorize-faces:3400 -e FACES_API_KEY=<key> \
       sumirrorize-faces:latest python -m app.enroll 3 front=/photos/01.jpg left=/photos/02.jpg
 
-or locally, with FACES_URL pointing at the service. Each argument is angle=path.
+or locally with FACES_URL set. Each argument is angle=path.
 """
 
 from __future__ import annotations

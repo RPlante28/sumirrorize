@@ -1,7 +1,4 @@
-"""
-Limits how often one visitor can ask "who is this?". The mirror page asks twice a second;
-much more than that from one address is someone trying lots of photos.
-"""
+# Limits how often one address can ask "who is this?", so nobody can try lots of photos fast.
 
 from __future__ import annotations
 
@@ -10,13 +7,13 @@ from fastapi import Request
 
 
 def client_address(request: Request) -> str:
-    """The visitor's address. Behind Cloudflare the real one is in CF-Connecting-IP."""
+    """Behind Cloudflare the real address is in CF-Connecting-IP."""
     forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "")
     return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
 
 
 class RateLimiter:
-    """Token bucket per address: `burst` requests at once, refilling at `per_second`."""
+    """Token bucket per address."""
 
     def __init__(self, per_second: float, burst: int):
         self._rate = per_second
@@ -29,6 +26,6 @@ class RateLimiter:
         tokens = min(self._burst, tokens + (now - last) * self._rate)
         allowed = tokens >= 1
         self._buckets[address] = (tokens - 1 if allowed else tokens, now)
-        if len(self._buckets) > 10_000:  # forget visitors who left long ago
+        if len(self._buckets) > 10_000:  # forget old ones
             self._buckets = {a: b for a, b in self._buckets.items() if now - b[1] < 60}
         return allowed

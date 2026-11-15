@@ -1,4 +1,4 @@
-"""Face pictures and fingerprints in the database (the `picture` table)."""
+# face pictures and fingerprints (the picture table)
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ class Store(Protocol):
 
 
 def _vector(fingerprint: np.ndarray) -> str:
-    """pgvector's text format, e.g. "[0.1,0.2]". Avoids needing a separate pgvector package."""
+    """pgvector's text format, e.g. "[0.1,0.2]". Saves needing the pgvector package."""
     return "[" + ",".join(f"{v:.7g}" for v in fingerprint.tolist()) + "]"
 
 
@@ -63,7 +63,7 @@ class PostgresStore:
         return [SavedPicture(r["angle"], r["created_at"]) for r in rows]
 
     async def replace_pictures(self, person_id: int, pictures: Sequence[NewPicture]) -> None:
-        # One transaction, so the mirror never sees half of an old set and half of a new one.
+        # one transaction, so the mirror never sees half an old set and half a new one
         async with self._pool.acquire() as connection, connection.transaction():
             await connection.execute("DELETE FROM picture WHERE person_id = $1", person_id)
             await connection.executemany(
@@ -77,7 +77,7 @@ class PostgresStore:
         return int(result.split()[-1])
 
     async def closest(self, fingerprint: np.ndarray) -> Optional[Match]:
-        # <=> is pgvector's cosine distance, which is 1 - cosine similarity.
+        # <=> is cosine distance, i.e. 1 - similarity
         row = await self._pool.fetchrow(
             """SELECT person_id, 1 - (face_encoding <=> $1::vector) AS similarity
                FROM picture WHERE face_encoding IS NOT NULL

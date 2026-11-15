@@ -15,13 +15,13 @@ renders its own pages, so it has no separate backend here.
 How they connect:
 
 ```
- frontends/app (sign-up) ──> faces: save my face ──┐
-       │                                           │
-       └── Brightspace sign-in ──> d3l ────────────┤
-                                    ^              ├──> Postgres (db/)
- frontends/mirror ──> backends/mirror ──> faces: who is this?
-   (camera frames)          │        ──> weather   │
-                            └──> widget layouts ───┘
+ frontends/app (sign-up) --> faces: save my face --+
+       |                                           |
+       +-- Brightspace sign-in --> d3l ------------+
+                                    ^              +--> Postgres (db/)
+ frontends/mirror --> backends/mirror --> faces: who is this?
+   (camera frames)          |        --> weather   |
+                            +--> widget layouts ---+
 ```
 
 - **Mirror backend:** sends camera frames to faces. When someone is recognized, it hands the page

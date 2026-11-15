@@ -23,7 +23,7 @@ const app = express();
 app.disable("x-powered-by");
 app.use(cors());
 
-/** Express 4 doesn't catch rejected promises from handlers; this passes them to the error handler. */
+// Express 4 doesn't catch rejected promises from handlers
 function handle(fn: (req: Request, res: Response) => Promise<unknown>): RequestHandler {
   return (req, res, next) => fn(req, res).catch(next);
 }
@@ -32,7 +32,7 @@ function personId(res: Response): number {
   return res.locals.personId as number;
 }
 
-// --- Sign-in viewer. Opened in a new tab, so the one-time link is its only credential. ---
+// --- sign-in viewer. opened in a new tab, the one-time link is its only credential ---
 
 app.get("/login/:token", (req, res) => {
   if (!isLoginLink(req.params.token)) {
@@ -41,7 +41,7 @@ app.get("/login/:token", (req, res) => {
   }
   res.set({
     "Cache-Control": "no-store",
-    // Keeps the link out of Referer headers and stops other sites framing the page.
+    // keeps the link out of Referer headers and stops other sites framing the page
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy":
       "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",
@@ -50,7 +50,7 @@ app.get("/login/:token", (req, res) => {
 });
 app.use("/static", express.static(PUBLIC_DIR, { index: false }));
 
-// --- Everything below needs an API key. ---
+// --- everything below needs an API key ---
 
 app.use((req, res, next) => {
   identifyPerson(req.get("authorization"), req.get("x-person-id")).then((id) => {
@@ -59,7 +59,7 @@ app.use((req, res, next) => {
   }, next);
 });
 
-/** Starts a Brightspace sign-in. Open `path` (on this server) in a new tab. */
+/** Starts a Brightspace sign-in. Open `path` in a new tab. */
 app.post(
   "/login",
   handle(async (_req, res) => {
@@ -67,7 +67,7 @@ app.post(
   })
 );
 
-/** Whether this person's Brightspace is connected. Poll it while the sign-in tab is open. */
+/** Is this person's Brightspace connected? Polled while the sign-in tab is open. */
 app.get(
   "/session",
   handle(async (_req, res) => {
@@ -76,7 +76,7 @@ app.get(
   })
 );
 
-/** Signs out: forgets the saved Brightspace login and stops any sign-in in progress. */
+/** Signs out: forgets the saved login and stops any sign-in in progress. */
 app.delete(
   "/session",
   handle(async (_req, res) => {
@@ -89,7 +89,7 @@ app.delete(
 
 // --- Brightspace data ---
 
-// Values the server looks up itself so the app doesn't have to pass them.
+// looked up by the server so apps don't have to pass them
 const lookups: Record<string, (personId: number) => Promise<string>> = {
   "{me}": async (personId) => {
     const me = (await getJson(personId, `${LP}/users/whoami`)) as { Identifier: string };
@@ -105,7 +105,7 @@ const lookups: Record<string, (personId: number) => Promise<string>> = {
 async function brightspacePath(personId: number, template: string, params: Record<string, string>): Promise<string> {
   let path = template.replace(/:(\w+)/g, (_, name: string) => {
     const value = params[name];
-    // Every route param is a numeric ID; anything else could rewrite the path.
+    // route params are numeric IDs, anything else could rewrite the path
     if (!/^\d+$/.test(value)) throw new ApiError(400, `${name} must be a number`);
     return value;
   });
@@ -143,7 +143,7 @@ for (const [route, template] of Object.entries(fileRoutes)) {
   );
 }
 
-// Any other Brightspace API GET, e.g. /raw/le/1.100/123/quizzes/
+// any other Brightspace API GET, e.g. /raw/le/1.100/123/quizzes/
 app.get(
   "/raw/*",
   handle(async (req, res) => {

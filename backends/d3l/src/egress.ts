@@ -3,20 +3,16 @@ import { createServer } from "node:http";
 import { BlockList, connect, isIP } from "node:net";
 import type { AddressInfo } from "node:net";
 
-/*
- * The sign-in browser is a real browser running on our server, steered by whoever is signing
- * in. Left alone it could be pointed at things only the server can reach: the database, the
- * other services, anything else on the machine's networks. So all of its traffic goes through
- * this small proxy, which only connects to public internet addresses, over HTTPS.
- *
- * The check is made on the address actually connected to, after looking the name up, so a
- * public-looking name that points at a private address is refused as well.
- */
+// The sign-in browser runs on our server and is steered by whoever is signing in, so left alone
+// it could be pointed at the database, the other services, or anything else the server can reach.
+// All its traffic goes through this proxy, which only connects to public addresses over HTTPS.
+// The check is on the address actually connected to, so a public name that points at a private
+// address is refused too.
 
 const HTTPS_PORT = 443;
 
-// Addresses that aren't the public internet: this machine, private and Docker networks,
-// link-local (which includes cloud metadata services), and other reserved ranges.
+// not the public internet: this machine, private and Docker networks, link-local (cloud metadata
+// lives there) and other reserved ranges
 const notPublic = new BlockList();
 for (const [network, prefix] of [
   ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
@@ -31,7 +27,7 @@ for (const [network, prefix] of [
 }
 
 export function isPublicAddress(address: string): boolean {
-  const mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)?.[1]; // an IPv4 address written as IPv6
+  const mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i)?.[1];  // IPv4 written as IPv6
   if (mapped) return !notPublic.check(mapped, "ipv4");
   const family = isIP(address);
   return family !== 0 && !notPublic.check(address, family === 4 ? "ipv4" : "ipv6");
@@ -46,19 +42,19 @@ function hostAndPort(target: string): { host: string; port: number } | null {
 /** The public address to connect to for `host`, or null if it has none. */
 async function publicAddress(host: string): Promise<string | null> {
   const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => []);
-  // If a name has any non-public address, refuse it outright rather than pick around it.
+  // any non-public address at all and the name is refused
   if (addresses.length === 0 || !addresses.every((a) => isPublicAddress(a.address))) return null;
   return addresses[0].address;
 }
 
-/** Starts the proxy on this machine only and returns its address for Chromium, e.g. "http://127.0.0.1:41873". */
+/** Starts the proxy on localhost and returns its address, e.g. "http://127.0.0.1:41873". */
 export async function startEgressProxy(): Promise<string> {
-  // Plain http:// pages come here as ordinary requests. Nothing a sign-in needs is plain HTTP.
+  // plain http:// pages arrive as ordinary requests. nothing a sign-in needs is plain HTTP
   const server = createServer((_request, response) => {
     response.writeHead(403, { "Content-Type": "text/plain" }).end("The sign-in browser only opens HTTPS pages.");
   });
 
-  // HTTPS pages come as CONNECT requests: "open me a connection to host:443".
+  // https pages arrive as CONNECT host:443
   server.on("connect", (request, client) => {
     void (async () => {
       const target = hostAndPort(request.url ?? "");

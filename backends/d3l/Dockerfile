@@ -1,9 +1,8 @@
-# Playwright's image ships Chromium and the system libraries it needs. Keep its version
-# in step with the playwright package in package-lock.json.
+# Playwright's image ships Chromium. Keep its version in step with playwright in package-lock.json.
 FROM mcr.microsoft.com/playwright:v1.65.1-noble AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-# --ignore-scripts skips the postinstall browser download; the image already has one.
+# the image already has a browser, so skip the postinstall download
 RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY src ./src

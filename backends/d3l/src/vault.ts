@@ -5,9 +5,8 @@ const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
 /**
- * Encrypts with AES-256-GCM. The same `label` (e.g. the person ID) must be given to
- * unseal, so one person's sealed data can't be copied into another person's row.
- * Layout: IV | auth tag | ciphertext.
+ * AES-256-GCM. The same `label` (e.g. the person ID) is needed to unseal, so one person's sealed
+ * data can't be copied into another's row. Layout: IV | auth tag | ciphertext.
  */
 export function seal(plaintext: string, label: string): Buffer {
   const iv = randomBytes(IV_BYTES);
@@ -17,7 +16,7 @@ export function seal(plaintext: string, label: string): Buffer {
   return Buffer.concat([iv, cipher.getAuthTag(), body]);
 }
 
-/** Reverses seal(). Throws if the data was tampered with, or the key or label is wrong. */
+/** Throws if the data was tampered with, or the key or label is wrong. */
 export function unseal(sealed: Buffer, label: string): string {
   const decipher = createDecipheriv("aes-256-gcm", SESSION_ENCRYPTION_KEY, sealed.subarray(0, IV_BYTES));
   decipher.setAAD(Buffer.from(label));

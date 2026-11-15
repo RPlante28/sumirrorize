@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}My mirror · Sumirrorize{% endblock %}
+{% block title %}My mirror | Sumirrorize{% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='settings.js') }}" type="module"></script>{% endblock %}
 {% block content %}
   <h1>Hi, {{ person.name }}</h1>
@@ -11,7 +11,7 @@
     {% if pictures is none %}
       <p class="status">Couldn't check right now. Reload in a minute.</p>
     {% elif pictures %}
-      <p class="status done">✓ Set up ({{ pictures }} pictures)</p>
+      <p class="status done">Set up ({{ pictures }} pictures)</p>
       <a class="button secondary" href="{{ url_for('face_pictures') }}">Retake pictures</a>
     {% else %}
       <p class="status">Not set up yet. The mirror needs a few pictures to recognize you.</p>
@@ -30,14 +30,26 @@
   </section>
 
   <section class="setting">
+    <h2>Google Calendar</h2>
+    {% if calendar %}
+      <p class="status done" id="cal-status">Connected. Your events show in the mirror's calendar.</p>
+      <button type="button" class="secondary" id="cal-disconnect">Disconnect</button>
+    {% else %}
+      <p class="status" id="cal-status">Not connected. Connect it to see your events on the mirror.</p>
+      <a class="button primary" href="{{ url_for('login', calendar=1) }}">Connect Google Calendar</a>
+    {% endif %}
+    <p class="message retry" id="cal-error" role="alert" hidden></p>
+  </section>
+
+  <section class="setting">
     <h2>Weather units</h2>
     <div class="unit-container">
-      <span>Metric (°C)</span>
+      <span>Metric (&deg;C)</span>
       <label class="switch">
         <input type="checkbox" id="unitSwitch" aria-label="Use Fahrenheit" {% if units == "imperial" %}checked{% endif %}>
         <span class="slider"></span>
       </label>
-      <span>Imperial (°F)</span>
+      <span>Imperial (&deg;F)</span>
     </div>
     <p id="unitLabel" role="status"></p>
   </section>
@@ -59,7 +71,7 @@
       <button type="submit" class="secondary">Sign out</button>
     </form>
     <button type="button" class="danger" id="delete">Delete my account</button>
-    <p class="description">Deletes your face pictures, Brightspace connection and settings.</p>
+    <p class="description">Deletes your face pictures, Brightspace and calendar connections, and settings.</p>
     <p class="message retry" id="delete-error" role="alert" hidden></p>
   </section>
 {% endblock %}

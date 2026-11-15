@@ -1,4 +1,4 @@
-"""Reading people and their widget layouts from the database."""
+# people and their widget layouts
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ class WidgetPlacement:
 class Store(Protocol):
     async def person(self, person_id: int) -> Optional[Person]: ...
     async def enabled_widgets(self, person_id: int) -> list[WidgetPlacement]: ...
+    async def google_token(self, person_id: int) -> Optional[bytes]: ...
 
 
 class PostgresStore:
@@ -50,6 +51,10 @@ class PostgresStore:
             "SELECT person_id, display_name FROM person WHERE person_id = $1", person_id
         )
         return Person(row["person_id"], row["display_name"]) if row else None
+
+    async def google_token(self, person_id: int) -> Optional[bytes]:
+        """Their Google Calendar token as the app saved it (encrypted), or None if it isn't connected."""
+        return await self._pool.fetchval("SELECT refresh_token FROM google_calendar WHERE person_id = $1", person_id)
 
     async def enabled_widgets(self, person_id: int) -> list[WidgetPlacement]:
         rows = await self._pool.fetch(

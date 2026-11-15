@@ -23,15 +23,15 @@ needs `Authorization: Bearer <FACES_API_KEY>`. The mirror backend and the sign-u
 
 ## How well it works
 
-- **Clear separation between people.** The same person scores 0.6–0.97 similarity and different
+- **Clear separation between people.** The same person scores 0.6 to 0.97 similarity and different
   people stay under 0.3. Anything at or above **0.363** counts as a match (the model's recommended
   cutoff, `FACES_MATCH_THRESHOLD`).
 - **Team photos (Nov 14):** with 15 of each person's 20 photos saved, all 15 held-back photos were
-  recognized as the right person (similarity 0.59–0.89). No one was mistaken for someone else.
+  recognized as the right person (similarity 0.59 to 0.89). No one was mistaken for someone else.
 - **Live:** a browser with a fake webcam on `sumirrorize.marist.dev` was recognized about
   3 seconds after the page opened, and the mirror cleared 8 seconds after the person left.
 - **Blinks (Nov 15):** on public videos of people talking to a camera, sampled 8 times a second
-  like the mirror does, eyes score about 1.0 open and dip to 0.2–0.4 during a blink. Quick natural
+  like the mirror does, eyes score about 1.0 open and dip to 0.2 to 0.4 during a blink. Quick natural
   blinks are caught about half the time; a slow, deliberate one almost always. A still photo of
   the same person, shown to the same camera for 30 seconds, never registered a blink. Faces still
   match with their eyes shut (similarity 0.83 or more).
@@ -87,7 +87,7 @@ show whether someone's face is set up.
 
 ### `PUT /people/{id}/faces`
 
-Replaces a person's face pictures. The JSON body takes 1–20 pictures:
+Replaces a person's face pictures. The JSON body takes 1 to 20 pictures:
 
 ```json
 { "pictures": [

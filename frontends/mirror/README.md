@@ -34,8 +34,8 @@ judged by the server; see [the backend](../../backends/mirror/README.md).
 
 ## How it's built
 
-- **Black is the mirror.** On a projected mirror black shows as glass, so everything is light on
-  black.
+- **The camera view is the mirror.** It fills the screen, flipped, with light text on dark
+  see-through cards over it.
 - **Widgets go where the person put them.** Each widget is positioned from its saved `x`, `y`,
   `w`, `h` (fractions of the screen).
 - **Except on tall screens.** On a phone held upright (narrower than 4:5), saved positions would

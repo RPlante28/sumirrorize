@@ -1,11 +1,9 @@
-"""
-Finding faces in a picture and turning each into a fingerprint: 128 numbers that are close
-together for the same person. Uses three free models:
-- YuNet finds faces: https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
-- SFace makes fingerprints: https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface
-- open-closed-eye says whether an eye is open, for the mirror's blink check:
-  https://github.com/openvinotoolkit/open_model_zoo/tree/master/models/public/open-closed-eye-0001
-"""
+# Finds faces in a picture and turns each into a fingerprint: 128 numbers that end up close
+# together for the same person. Models:
+#   YuNet finds faces: https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
+#   SFace makes fingerprints: https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface
+#   open-closed-eye, for the blink check:
+#     https://github.com/openvinotoolkit/open_model_zoo/tree/master/models/public/open-closed-eye-0001
 
 from __future__ import annotations
 
@@ -21,29 +19,29 @@ DETECTOR_FILE = "face_detection_yunet_2023mar.onnx"
 RECOGNIZER_FILE = "face_recognition_sface_2021dec.onnx"
 EYES_FILE = "open_closed_eye.onnx"
 
-# Bigger pictures are shrunk first; faces stay plenty big and detection stays fast.
+# bigger pictures are shrunk first so detection stays fast
 MAX_SIDE = 1280
 DETECTION_CONFIDENCE = 0.8
 
-# Sign-up photo checks, from the face-recog enrollment script (scripts/enrollment.py).
+# sign-up photo checks, from scripts/enrollment.py
 MIN_ENROLL_FACE = 80          # pixels wide
 MIN_BRIGHTNESS, MAX_BRIGHTNESS = 35, 220
-# At the mirror, ignore faces this small: someone far behind, not the person at the mirror.
+# at the mirror, ignore faces smaller than this (someone far behind)
 MIN_MIRROR_FACE = 60
 
-# The eye model takes a 32-pixel square around one eye. How much of the face that square should
-# cover varies from face to face, so each eye is cut out at several sizes (as fractions of the
-# distance between the eyes) and the answers are averaged, which is much steadier than one size.
+# The eye model wants a 32px square around one eye. Each eye is cut out at several sizes
+# (fractions of the distance between the eyes) and the answers are averaged, which is a lot
+# steadier than a single size.
 EYE_SIZE = 32
 EYE_CROP_SCALES = (0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
 
 
 @dataclass(frozen=True)
 class Face:
-    width: int                 # pixels, in the picture as given
+    width: int  # pixels, in the original picture
     brightness: float          # 0-255, average over the face
-    fingerprint: np.ndarray    # 128 float32 numbers
-    eyes_open: float           # 0 (both eyes shut) to 1 (both wide open)
+    fingerprint: np.ndarray  # 128 float32s
+    eyes_open: float  # 0 = both shut, 1 = both wide open
 
 
 @dataclass(frozen=True)
@@ -56,7 +54,7 @@ class Analysis:
 
 
 class BadImage(ValueError):
-    """The bytes aren't a picture OpenCV can read."""
+    """Not a picture OpenCV can read."""
 
 
 class Engine(Protocol):
@@ -71,7 +69,7 @@ class OpenCvEngine:
         self._detector = cv2.FaceDetectorYN.create(str(models_dir / DETECTOR_FILE), "", (320, 320), DETECTION_CONFIDENCE)
         self._recognizer = cv2.FaceRecognizerSF.create(str(models_dir / RECOGNIZER_FILE), "")
         self._eyes = cv2.dnn.readNetFromONNX(str(models_dir / EYES_FILE))
-        # The OpenCV objects keep state between calls, so only one picture at a time.
+        # the OpenCV objects keep state between calls, so one picture at a time
         self._lock = threading.Lock()
 
     def analyze(self, image: bytes) -> Analysis:
@@ -101,12 +99,12 @@ class OpenCvEngine:
         return Analysis(faces)
 
     def _eyes_open(self, picture: np.ndarray, row: np.ndarray) -> float:
-        """How open the face's eyes are. `row` is YuNet's result, which includes where each eye is."""
+        """`row` is YuNet's result, which includes where each eye is."""
         right, left = row[4:6].astype(np.float32), row[6:8].astype(np.float32)
         apart = float(np.linalg.norm(left - right))
         if apart < 1:
             return 0.0
-        # Turn each cut-out so the eyes sit level, as in the pictures the model learned from.
+        # level the eyes, like the pictures the model was trained on
         tilt = float(np.degrees(np.arctan2(left[1] - right[1], left[0] - right[0])))
         crops = []
         for eye in (right, left):
@@ -116,7 +114,7 @@ class OpenCvEngine:
                 crops.append(cv2.warpAffine(picture, matrix, (EYE_SIZE, EYE_SIZE), flags=cv2.INTER_AREA,
                                             borderMode=cv2.BORDER_REPLICATE))
         self._eyes.setInput(cv2.dnn.blobFromImages(crops, 1 / 255, (EYE_SIZE, EYE_SIZE), (127, 127, 127)))
-        # One row per cut-out: [chance it's closed, chance it's open].
+        # one row per cut-out: [closed, open]
         return float(self._eyes.forward().reshape(len(crops), 2)[:, 1].mean())
 
 
@@ -136,9 +134,8 @@ def enrollment_problem(analysis: Analysis) -> Optional[str]:
 
 def other_people(fingerprints: list[np.ndarray], threshold: float) -> set[int]:
     """
-    Which of one person's sign-up pictures (by position) look like someone else. Pictures from
-    different angles don't all match each other, so each is compared with the most typical one:
-    the picture that's most like all the rest.
+    Which of a person's sign-up pictures (by index) look like someone else. Different angles
+    don't all match each other, so each is compared with the most typical picture of the set.
     """
     if len(fingerprints) < 2:
         return set()
@@ -149,6 +146,6 @@ def other_people(fingerprints: list[np.ndarray], threshold: float) -> set[int]:
 
 
 def mirror_face(analysis: Analysis) -> Optional[Face]:
-    """The face of whoever is at the mirror: the largest one, if it's close enough."""
+    """The largest face, if it's close enough."""
     face = analysis.largest
     return face if face and face.width >= MIN_MIRROR_FACE else None

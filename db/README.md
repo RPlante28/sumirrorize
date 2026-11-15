@@ -37,6 +37,7 @@ Or, while your local data doesn't matter, wipe it and start fresh:
 | `003_brightspace_session.sql` | d3l's saved Brightspace logins |
 | `004_announcements_and_layout.sql` | The announcements widget, and a default layout that keeps the middle clear |
 | `005_google_accounts.sql` | Links each person to the Google account they sign in to the app with |
+| `006_google_calendar.sql` | Saved Google Calendar access |
 
 Once there are many of these, a migration tool that tracks which files have run would be worth it
 (Alembic fits Python).
@@ -44,12 +45,14 @@ Once there are many of these, a migration tool that tracks which files have run 
 ## Tables
 
 ```
-person ──< picture          any number, each labeled with its angle (front, left, ...)
-   │
-   ├────< person_widget >── widget
-   │      (one row per person per widget: on/off, position, settings)
-   │
-   └────  brightspace_session   (at most one; managed by d3l)
+person --< picture          any number, each labeled with its angle (front, left, ...)
+   |
+   +----< person_widget >-- widget
+   |      (one row per person per widget: on/off, position, settings)
+   |
+   +----  brightspace_session   (at most one; managed by d3l)
+   |
+   +----  google_calendar       (at most one; written by the sign-up app)
 ```
 
 | Table | What it holds |
@@ -57,8 +60,9 @@ person ──< picture          any number, each labeled with its angle (front, 
 | `person` | `person_id`, `display_name`, `api_key_hash` (the SHA-256 of their API key; the key itself is never stored), and `google_sub`: the ID of the Google account they sign in to the app with. |
 | `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the face's fingerprint, 128 numbers from OpenCV's SFace model. A new upload replaces the person's whole set. Only the [faces service](../backends/faces/README.md) reads or writes this table; save faces through it rather than inserting rows yourself. |
 | `widget` | The widgets the mirror offers (`clock`, `greeting`, `summary`, `weather`, `calendar`, `assignments`, `announcements`), each with a description and a default layout. |
-| `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"city": "Poughkeepsie"}`). |
+| `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"units": "metric"}`). |
 | `brightspace_session` | The person's saved Brightspace login, encrypted by d3l. Only d3l reads or writes it; ask d3l (`GET /session`) whether someone is signed in. |
+| `google_calendar` | The person's Google Calendar refresh token, encrypted by the sign-up app. The mirror backend reads it to fetch their events. A row exists only while their calendar is connected. |
 
 Positions are fractions of the screen: `(0, 0)` is the top-left corner and `(1, 1)` the
 bottom-right. `x`/`y` is the widget's top-left corner and `w`/`h` its size, so a layout
@@ -67,7 +71,7 @@ looks the same on any screen. The database refuses a widget that runs off the sc
 Things the database does for you:
 - A new person automatically gets every widget at its default position.
 - A newly added widget type is given to everyone who already exists.
-- Deleting a person deletes their pictures, widgets and Brightspace login.
+- Deleting a person deletes their pictures, widgets, Brightspace login and calendar access.
 - `updated_at` is set automatically on every change.
 
 ## Face photos are stored

@@ -8,13 +8,10 @@ import { HOME_URL } from "./config.js";
 import { ApiError } from "./errors.js";
 import { storeSignIn } from "./sessions.js";
 
-/*
- * Browser sign-in in a tab. Brightspace's login cookies land in whichever browser the
- * person signs in with, and our site can't read another site's cookies. So the browser
- * runs here: d3l streams its screen to a tab (the viewer, public/login.html) and plays
- * the person's clicks and typing back into it. Once Brightspace is reached, the cookies
- * are saved for that person and the browser is closed.
- */
+// Sign-in in a tab. Brightspace's login cookies land in whichever browser signs in, and our site
+// can't read another site's cookies. So the browser runs here: d3l streams its screen to a tab
+// (public/login.html) and plays the person's clicks and typing back into it. Once Brightspace
+// is reached, the cookies are saved for that person and the browser is closed.
 
 const LOGIN_TIMEOUT = 10 * 60_000;
 const MAX_LOGINS = 4;
@@ -24,7 +21,7 @@ const MAX_PASTE = 1000;
 const MOUSE_BUTTONS = ["left", "middle", "right"] as const;
 
 type Viewport = { width: number; height: number };
-// Messages from the viewer. Positions are fractions (0-1) of the picture it was shown.
+// messages from the viewer. positions are fractions (0-1) of the picture
 type ViewerMessage =
   | { type: "move" | "down" | "up"; x: number; y: number; button?: string }
   | { type: "wheel"; x: number; y: number; dx: number; dy: number }
@@ -42,7 +39,7 @@ class RemoteLogin {
   private shown: Page | null = null;
   private stream: CDPSession | null = null;
   private viewport: Viewport = { width: 1280, height: 800 };
-  // Viewer input is applied strictly in order; typed characters must not swap places.
+  // input is applied strictly in order, typed characters must not swap places
   private inputQueue = Promise.resolve();
   private finishing = false;
   private closed = false;
@@ -56,7 +53,7 @@ class RemoteLogin {
   static async start(personId: number): Promise<RemoteLogin> {
     const login = new RemoteLogin(personId, await newContext());
     const page = await login.context.newPage();
-    // An SSO chain can abort this navigation; where it ends up is what matters.
+    // an SSO chain can abort this navigation, where it ends up is what matters
     page.goto(HOME_URL).catch(() => {});
     return login;
   }
@@ -68,7 +65,7 @@ class RemoteLogin {
     page.on("close", () => {
       if (this.shown === page) void this.show(this.context.pages().at(-1) ?? null);
     });
-    // The newest page (e.g. an SSO pop-up) is the one the person needs to see.
+    // the newest page (e.g. an SSO pop-up) is the one to show
     void this.show(page);
   }
 
@@ -90,7 +87,7 @@ class RemoteLogin {
     void this.show(this.shown);
   }
 
-  /** Points the screen stream at `page`. Streams only while a viewer is connected. */
+  /** Points the screen stream at `page`. Only streams while a viewer is connected. */
   private async show(page: Page | null): Promise<void> {
     this.shown = page;
     await this.stopStream();
@@ -104,7 +101,7 @@ class RemoteLogin {
     }
     this.stream = stream;
     stream.on("Page.screencastFrame", ({ data, sessionId }) => {
-      // Acknowledging only once the frame is sent keeps a slow connection from piling up frames.
+      // ack only once the frame is sent, so a slow connection doesn't pile up frames
       this.viewer?.send(Buffer.from(data, "base64"), () => {
         stream.send("Page.screencastFrameAck", { sessionId }).catch(() => {});
       });
@@ -146,8 +143,8 @@ class RemoteLogin {
       case "key": {
         const combo = keyCombo(message);
         if (!combo) break;
-        // A lone character is typed: a real key press where the keyboard has that key, plain
-        // text where it doesn't (e.g. "é"). Anything else is a named key or a shortcut.
+        // a lone character is typed (a key press if the keyboard has that key, plain text if
+        // not). anything else is a named key or a shortcut
         if (combo === message.key && combo.length === 1) await page.keyboard.type(combo);
         else await page.keyboard.press(combo);
         break;
@@ -167,7 +164,7 @@ class RemoteLogin {
     return [clamp(message.x, 0, 1) * this.viewport.width, clamp(message.y, 0, 1) * this.viewport.height];
   }
 
-  /** Matches the browser to the viewer's size, so the picture is sharp and 1:1. */
+  /** Matches the browser to the viewer's size so the picture is 1:1. */
   private async resize(size: { width: number; height: number }): Promise<void> {
     this.viewport = {
       width: Math.round(clamp(size.width, MIN_VIEWPORT.width, MAX_VIEWPORT.width)),
@@ -182,7 +179,7 @@ class RemoteLogin {
     try {
       await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
       const cookies = await this.context.cookies();
-      // Being on a Brightspace page isn't proof on its own: make sure it will issue a token.
+      // being on a Brightspace page isn't proof on its own, make sure it will issue a token
       if (!(await mintToken(cookies))) return;
       await storeSignIn(this.personId, cookies);
       forgetToken(this.personId);
@@ -222,7 +219,7 @@ function keyCombo(message: Extract<ViewerMessage, { type: "key" }>): string | nu
   const { key } = message;
   if (typeof key !== "string" || key.length === 0 || key.length > 20) return null;
   const name = key === " " ? "Space" : key;
-  // A typed character already reflects Shift (and AltGr), so only shortcuts carry modifiers.
+  // a typed character already includes Shift, so only shortcuts carry modifiers
   if (key.length === 1 && !message.ctrl && !message.meta) return name;
   const modifiers = [
     message.ctrl && "Control",
@@ -233,7 +230,7 @@ function keyCombo(message: Extract<ViewerMessage, { type: "key" }>): string | nu
   return [...modifiers, name].join("+");
 }
 
-/** Opens a browser for `personId` to sign in with. Returns the viewer link to open in a new tab. */
+/** Opens a browser for `personId` to sign in with. Returns the viewer link. */
 export async function startLogin(personId: number): Promise<{ path: string; expiresAt: Date }> {
   if (logins.size + starting >= MAX_LOGINS) {
     throw new ApiError(503, "Too many sign-ins in progress, try again in a minute", "busy");
@@ -245,7 +242,7 @@ export async function startLogin(personId: number): Promise<{ path: string; expi
   } finally {
     starting--;
   }
-  // One sign-in per person: the newest one wins.
+  // one sign-in per person, the newest wins
   for (const other of logins.values()) {
     if (other.personId === personId) void other.close("replaced");
   }
@@ -266,7 +263,7 @@ export async function cancelLogins(personId: number): Promise<void> {
   await Promise.all(mine.map((login) => login.close("cancelled")));
 }
 
-/** Accepts the viewer's WebSocket at /login/<token>/stream. The token is its only credential. */
+/** The viewer's WebSocket at /login/<token>/stream. The token is its only credential. */
 export function acceptViewers(server: Server): void {
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
   server.on("upgrade", (request, socket, head) => {

@@ -1,11 +1,5 @@
-"""
-Current conditions, the next 12 hours, and today's summary from Open-Meteo.
-Free, no API key. Docs: https://open-meteo.com/en/docs
-
-Adapted from StormWatch's api/open_meteo.py. One request now covers everything, and
-Open-Meteo picks the current hour itself (forecast_hours), so there's no searching
-through the hourly list for "now".
-"""
+# Current conditions, the next 12 hours and today's summary from Open-Meteo (no API key).
+# Adapted from StormWatch's api/open_meteo.py. Docs: https://open-meteo.com/en/docs
 
 from __future__ import annotations
 
@@ -17,7 +11,7 @@ import httpx
 URL = "https://api.open-meteo.com/v1/forecast"
 HOURS_AHEAD = 12
 
-# WMO weather codes: https://open-meteo.com/en/docs#weather_variable_documentation
+# https://open-meteo.com/en/docs#weather_variable_documentation
 WMO_CODES: dict[int, str] = {
     0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
     45: "Fog", 48: "Icy fog",
@@ -36,7 +30,7 @@ def describe(code: int) -> str:
     return WMO_CODES.get(code, "Unknown")
 
 
-# Everything below is metric: °C and km/h.
+# everything below is metric (C, km/h)
 
 @dataclass(frozen=True)
 class Current:
@@ -94,7 +88,7 @@ async def fetch_forecast(client: httpx.AsyncClient, latitude: float, longitude: 
     response.raise_for_status()
     data = response.json()
 
-    # Times come back in the location's local time without an offset; attach it.
+    # times come back local with no offset
     zone = timezone(timedelta(seconds=data["utc_offset_seconds"]))
 
     def local_time(text: str) -> datetime:

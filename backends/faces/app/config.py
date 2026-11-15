@@ -1,4 +1,4 @@
-"""Settings, read from environment variables (see .env.example)."""
+# settings come from env vars (see .env.example)
 
 from __future__ import annotations
 
@@ -10,11 +10,10 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Settings:
     database_url: str
-    # What the other backends (mirror, sign-up app) must send. This service handles biometric data.
+    # what the mirror backend and the sign-up app must send
     api_key: str
     models_dir: Path
-    # How alike two face fingerprints must be (cosine similarity) to count as the same person.
-    # 0.363 is the value recommended for this model (OpenCV's SFace).
+    # cosine similarity needed to count as the same person. 0.363 is what SFace recommends
     match_threshold: float = 0.363
 
 

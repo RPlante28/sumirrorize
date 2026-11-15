@@ -108,12 +108,12 @@ All are `GET`. `:ou` is a course ID from `/courses` (`OrgUnit.Id`).
 |---|---|
 | `/me`, `/profile`, `/profile/image` | Who you are |
 | `/courses` | Enrolled courses |
-| `/calendar?startDateTime=…&endDateTime=…` | Calendar events across all courses (dates required, ISO 8601) |
+| `/calendar?startDateTime=...&endDateTime=...` | Calendar events across all courses (dates required, ISO 8601) |
 | `/items`, `/due`, `/overdue` | Content items, upcoming due, and overdue items across all courses |
 | `/awards`, `/locker` | Badges/certificates, personal file locker |
 | `/courses/:ou/announcements` | Announcements |
 | `/courses/:ou/updates` | Unread counts (feedback, discussions, quizzes) |
-| `/courses/:ou/calendar?startDateTime=…&endDateTime=…` | One course's events |
+| `/courses/:ou/calendar?startDateTime=...&endDateTime=...` | One course's events |
 | `/courses/:ou/grades` | Your grades |
 | `/courses/:ou/grades/final` | Final grade (404 until released) |
 | `/courses/:ou/grades/items`, `/grades/categories` | Grade items and categories |

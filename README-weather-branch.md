@@ -41,7 +41,7 @@ merged) before the next d3l rebuild.
 ## Tested
 
 - **Automated tests:** 10 tests against fake weather APIs (`backends/weather/tests`), covering
-  °F/°C conversion, the 12-hour window, alert order, caching, serving old data when a fetch
+  F/C conversion, the 12-hour window, alert order, caching, serving old data when a fetch
   fails, waiting before retrying, the 503 when there's no data, and weather still working
   without alerts.
 - **Real APIs:** run against the real Open-Meteo and NWS for Poughkeepsie, locally, in Docker

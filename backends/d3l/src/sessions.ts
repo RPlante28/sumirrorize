@@ -2,7 +2,7 @@ import type { Cookie } from "playwright";
 import { pool } from "./db.js";
 import { seal, unseal } from "./vault.js";
 
-// Saved Brightspace logins (the brightspace_session table), encrypted per person.
+// saved Brightspace logins (brightspace_session table), encrypted per person
 
 export async function loadCookies(personId: number): Promise<Cookie[]> {
   const { rows } = await pool.query<{ cookies: Buffer }>(
@@ -21,10 +21,7 @@ export async function storeSignIn(personId: number, cookies: Cookie[]): Promise<
   );
 }
 
-/**
- * Saves cookies renewed in the background. Only updates: if the person signed out in
- * the meantime, this must not sign them back in.
- */
+/** Saves cookies renewed in the background. Update only: if they signed out meanwhile, this must not sign them back in. */
 export async function updateCookies(personId: number, cookies: Cookie[]): Promise<void> {
   await pool.query("UPDATE brightspace_session SET cookies = $2 WHERE person_id = $1", [
     personId,

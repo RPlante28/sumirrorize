@@ -1,6 +1,5 @@
-/* The page shows the camera's view, flipped like a mirror, as the reflection, with light text and
-   dark see-through cards on top. Widgets size their text to their own box (cqh/cqw units), so
-   any layout scales. */
+/* The camera's view, flipped like a mirror, with light text and dark see-through cards on top.
+   Widgets size their text to their own box (cqh/cqw units), so any layout scales. */
 
 :root {
   --bg: #000;
@@ -8,7 +7,7 @@
   --muted: #9a9a9a;
   --faint: #5a5a5a;
   --border: rgba(255, 255, 255, 0.18);
-  /* Widget cards: dark enough to read text over the camera view, light enough to see through. */
+  /* dark enough to read text over the camera view, light enough to see through */
   --card: rgba(0, 0, 0, 0.55);
   --shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
   --warn: #ffb547;
@@ -33,9 +32,8 @@ html, body {
 
 .screen { position: fixed; inset: 0; z-index: 1; }
 
-/* The camera's live view fills the screen behind everything, flipped so it acts like a mirror.
-   Slightly darkened so text on top stays readable. Frames sent for recognizing faces are taken
-   from the video itself, so they aren't flipped or darkened. */
+/* Fills the screen behind everything, flipped and slightly darkened. Frames for recognizing
+   faces are taken from the video itself, so they aren't flipped or darkened. */
 .camera {
   position: fixed;
   inset: 0;
@@ -62,7 +60,7 @@ html, body {
 .idle-time { font-size: 16vmin; font-weight: 200; line-height: 1; font-variant-numeric: tabular-nums; }
 .idle-date { font-size: 3.5vmin; color: var(--muted); }
 .idle-prompt { margin-top: 6vh; font-size: 2.6vmin; color: var(--muted); }
-/* "Hi, Alex", shown over the prompt once the mirror recognizes someone and waits for their blink. */
+/* "Hi, Alex", shown over the prompt while waiting for a blink */
 .idle-hello { margin: 5vh 0 0; font-size: 7vmin; font-weight: 200; }
 .idle-hello + .idle-prompt { margin-top: 1vh; font-size: 3.2vmin; color: var(--text); }
 
@@ -80,9 +78,8 @@ html, body {
 
 /* --- Mirror --- */
 
-/* Each widget is a bordered card at its saved position (--x, --y, --w, --h, as fractions of the
-   screen, set by mirror.js). Text inside sizes to the card: cqh/cqw are percentages of the
-   card's height/width. */
+/* A bordered card at its saved position (--x, --y, --w, --h: fractions of the screen, set by
+   mirror.js). Text sizes to the card: cqh/cqw are percentages of its height/width. */
 .widget {
   position: absolute;
   left: calc(var(--x) * 100%);
@@ -123,7 +120,7 @@ html, body {
 .clock-time small { font-size: 0.32em; color: var(--muted); margin-left: 0.15em; }
 .clock-date { font-size: min(17cqh, 8cqw); color: var(--muted); margin-top: 4cqh; }
 
-/* Greeting and summary: text shrinks to fit if it's too long (see shrinkToFit in mirror.js). */
+/* Greeting and summary: text shrinks to fit (shrinkToFit in mirror.js) */
 .w-greeting, .w-summary {
   display: grid;
   place-items: center;
@@ -143,7 +140,7 @@ html, body {
 .weather-detail { font-size: min(11cqh, 5.5cqw); color: var(--muted); margin-top: 2cqh; }
 .weather-alert { font-size: min(11cqh, 5.5cqw); color: var(--warn); margin-bottom: 2cqh; }
 .hourly { display: none; }
-/* Boxes that aren't too wide for their height have room for the next few hours. */
+/* boxes that aren't too wide for their height have room for the next few hours */
 @container (aspect-ratio < 2.2) {
   .weather-now svg { width: min(24cqh, 18cqw); height: min(24cqh, 18cqw); }
   .weather-temp { font-size: min(26cqh, 20cqw); }
@@ -162,8 +159,7 @@ html, body {
   .hour-time, .hour-rain { color: var(--muted); }
 }
 
-/* List widgets (calendar, assignments, announcements). Everything inside is sized in em
-   from one base size that suits both narrow columns and short boxes. */
+/* List widgets. Everything inside is sized in em from one base size. */
 .w-calendar, .w-assignments, .w-announcements {
   display: flex;
   flex-direction: column;
@@ -181,7 +177,7 @@ html, body {
   margin-bottom: 0.9em;
 }
 
-/* Shows only whole items; the rest are counted in a "+N more" line (see fitList in mirror.js). */
+/* only whole items show, the rest are counted in a "+N more" line (fitList in mirror.js) */
 .list {
   flex: 1;
   min-height: 0;
@@ -219,9 +215,8 @@ html, body {
 }
 
 /* --- Tall screens (a phone held upright) ---
-   Saved positions are for wide screens. Here mirror.js groups the widgets instead: clock, weather,
-   greeting and summary across the top, and everything else in a row of cards along the bottom to
-   swipe through. The middle stays clear for your reflection. */
+   Saved positions are for wide screens. Here mirror.js groups the widgets: clock, weather,
+   greeting and summary on top, everything else as a row of cards along the bottom. */
 
 #widgets.tall {
   position: absolute;
@@ -245,7 +240,7 @@ html, body {
 .tall-top [data-key="summary"] { grid-column: 1 / -1; }
 .tall-top [data-key="greeting"] { height: 6.5vh; }
 .tall-top [data-key="summary"] { height: 9.5vh; }
-/* The weather card is small here: drop the hour-by-hour row and give the temperature the room. */
+/* the weather card is small here: no hour-by-hour row, bigger temperature */
 .tall-top .hourly { display: none; }
 .tall-top .weather-now svg { width: min(34cqh, 22cqw); height: min(34cqh, 22cqw); }
 .tall-top .weather-temp { font-size: min(38cqh, 24cqw); }
@@ -261,6 +256,6 @@ html, body {
   scrollbar-width: none;
 }
 .tall-cards::-webkit-scrollbar { display: none; }
-/* A little narrower than the screen, so the edge of the next card shows there's more to swipe to. */
+/* a bit narrower than the screen, so the edge of the next card shows */
 .tall-cards .widget { width: 86vw; height: 36vh; scroll-snap-align: center; }
 .tall-cards .widget:only-child { width: 94vw; }

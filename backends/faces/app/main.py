@@ -1,8 +1,6 @@
-"""
-The faces service: the only part of Sumirrorize that handles face pictures and fingerprints.
-Internal only; the mirror backend and the sign-up app call it with FACES_API_KEY. Run with:
-    uvicorn --factory app.main:create_app --port 3400
-"""
+# The faces service: the only part that touches face pictures and fingerprints. Internal only,
+# the mirror backend and the sign-up app call it with FACES_API_KEY.
+# run: uvicorn --factory app.main:create_app --port 3400
 
 from __future__ import annotations
 
@@ -28,7 +26,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
-MAX_PICTURES = 20  # the face-recog enrollment script takes 20
+MAX_PICTURES = 20  # scripts/enrollment.py takes 20
 ANGLE = re.compile(r"^[a-z][a-z0-9_]*$")
 DATA_URL = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,(.*)$", re.S)
 
@@ -64,7 +62,7 @@ def _decode(picture: PictureIn) -> tuple[bytes, str]:
 
 def create_app(settings: Optional[Settings] = None, store: Optional[Store] = None,
                engine: Optional[Engine] = None) -> FastAPI:
-    """`store` and `engine` let tests swap in a fake database and fake face models."""
+    """`store` and `engine` are for tests."""
     settings = settings or load_settings()
 
     @asynccontextmanager
@@ -111,7 +109,7 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
         return {
             "faces": len(analysis.faces),
             "match": {"personId": match.person_id, "similarity": round(match.similarity, 3)} if recognized else None,
-            # How open the eyes of the face at the mirror are (0-1): the mirror watches this for a blink.
+            # 0-1, the mirror watches this for a blink
             "eyesOpen": round(face.eyes_open, 3) if face is not None else None,
         }
 
@@ -127,9 +125,8 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
     @app.put("/people/{person_id}/faces", dependencies=[Depends(require_key)])
     async def enroll(person_id: int, body: Enrollment, request: Request):
         """
-        Replaces a person's face pictures. Every picture must show exactly one clear face, and
-        they must all be the same person; otherwise nothing is saved and `pictures` says which to
-        retake and why.
+        Replaces a person's face pictures. Each must show exactly one clear face and they must all
+        be the same person, otherwise nothing is saved and `pictures` says which to retake.
         """
         if not body.pictures or len(body.pictures) > MAX_PICTURES:
             raise ApiError(400, f"Send between 1 and {MAX_PICTURES} pictures", "bad_request")
@@ -147,7 +144,7 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
             if problem is None:
                 new.append(NewPicture(picture.angle, data, mime, analysis.faces[0].fingerprint))
 
-        # Among the pictures that are fine on their own, any that show somebody else.
+        # of the ones that are fine on their own, any that show somebody else
         good = [result for result in results if result["problem"] is None]
         for index in other_people([p.fingerprint for p in new], settings.match_threshold):
             good[index]["problem"] = "different_person"
@@ -160,7 +157,7 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
 
     @app.delete("/people/{person_id}/faces", dependencies=[Depends(require_key)])
     async def forget(person_id: int, request: Request):
-        """Deletes a person's face pictures; they won't be recognized until they sign up again."""
+        """Deletes a person's face pictures."""
         return {"deleted": await request.app.state.store.delete_pictures(person_id)}
 
     @app.get("/health")

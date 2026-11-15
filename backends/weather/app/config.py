@@ -1,4 +1,4 @@
-"""Settings, read from environment variables (see .env.example)."""
+# settings come from env vars (see .env.example)
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Settings:
-    # Where the mirror is. Weather is for the mirror's spot, not each person's.
+    # where the mirror is
     latitude: float
     longitude: float
     label: str = ""
-    # How long fetched data counts as fresh, in seconds.
+    # seconds
     forecast_ttl: float = 600
     alerts_ttl: float = 120
-    # After a failed fetch, wait this long before trying again (old data is served meanwhile).
+    # pause after a failed fetch (old data is served meanwhile)
     retry_after: float = 30
 
 

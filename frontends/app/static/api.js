@@ -21,7 +21,7 @@ export async function api(method, path, body) {
     throw new ApiError(0, { error: "Can't reach Sumirrorize. Check your connection and try again.", code: "offline" });
   }
   if (response.status === 401) {
-    // Signed out (e.g. in another tab): start over.
+    // signed out (e.g. in another tab), start over
     location.href = "/";
     throw new ApiError(401, { error: "Signed out", code: "signed_out" });
   }

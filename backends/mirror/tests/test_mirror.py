@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
 from app.blink import MAX_CLOSED, STEP_TIMEOUT, BlinkCheck
@@ -24,6 +26,9 @@ SETTINGS = Settings(
     weather_url="http://weather", faces_url="http://faces", faces_api_key="faces-key", timezone=ZONE,
 )
 NOW = datetime.now(timezone.utc)
+TOKEN_KEY = Fernet.generate_key()
+WITH_GOOGLE = replace(SETTINGS, google_client_id="client-id", google_client_secret="client-secret",
+                      google_token_key=TOKEN_KEY.decode())
 
 
 def iso(moment: datetime) -> str:
@@ -53,9 +58,13 @@ class FakeStore:
     async def enabled_widgets(self, person_id):
         return self.widgets
 
+    async def google_token(self, person_id):
+        # person 3 has connected their Google Calendar
+        return Fernet(TOKEN_KEY).encrypt(b"3:alex-refresh-token") if person_id == 3 else None
+
 
 WEATHER = {
-    "units": {"temperature": "°F", "speed": "mph"},
+    "units": {"temperature": "F", "speed": "mph"},
     "current": {"description": "Overcast", "temperature": 41.7},
     "today": {"high": 44.4, "low": 34.9, "precipitationChance": 40},
 }
@@ -69,6 +78,8 @@ class FakeBackends:
         self.weather_up = True
         self.faces_up = True
         self.odd_calendar = False
+        self.google_up = True
+        self.google_requests: list[httpx.Request] = []
 
     def faces(self, request: httpx.Request) -> httpx.Response:
         """
@@ -89,15 +100,42 @@ class FakeBackends:
         nobody = frame == "nobody"
         return httpx.Response(200, json={"faces": 0 if nobody else 1, "match": None, "eyesOpen": None if nobody else 0.98})
 
+    def google(self, request: httpx.Request) -> httpx.Response:
+        self.google_requests.append(request)
+        if not self.google_up:
+            return httpx.Response(503)
+        if request.url.host == "oauth2.googleapis.com":
+            sent = dict(pair.split("=") for pair in request.content.decode().split("&"))
+            assert sent == {"grant_type": "refresh_token", "refresh_token": "alex-refresh-token",
+                            "client_id": "client-id", "client_secret": "client-secret"}
+            return httpx.Response(200, json={"access_token": "access-1", "expires_in": 3600})
+        assert request.headers["authorization"] == "Bearer access-1"
+        assert request.url.path == "/calendar/v3/calendars/primary/events" and request.url.params["singleEvents"] == "true"
+        day = (NOW + timedelta(days=1)).astimezone(ZONE).date()
+        return httpx.Response(200, json={"items": [
+            {"summary": "Dentist", "location": "Main St", "status": "confirmed",
+             "start": {"dateTime": iso(NOW + timedelta(hours=1))}, "end": {"dateTime": iso(NOW + timedelta(hours=2))}},
+            {"summary": "Mum's birthday", "start": {"date": day.isoformat()}, "end": {"date": (day + timedelta(days=1)).isoformat()}},
+            {"summary": "Cancelled thing", "status": "cancelled",
+             "start": {"dateTime": iso(NOW + timedelta(hours=3))}, "end": {"dateTime": iso(NOW + timedelta(hours=4))}},
+            {"summary": "Party I said no to", "attendees": [{"self": True, "responseStatus": "declined"}],
+             "start": {"dateTime": iso(NOW + timedelta(hours=5))}, "end": {"dateTime": iso(NOW + timedelta(hours=6))}},
+            {"summary": "Already over",
+             "start": {"dateTime": iso(NOW - timedelta(hours=2))}, "end": {"dateTime": iso(NOW - timedelta(hours=1))}},
+            {"start": {"dateTime": iso(NOW + timedelta(days=3))}, "end": {"dateTime": iso(NOW + timedelta(days=3, hours=1))}},
+        ]})
+
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if request.url.host == "faces":
             return self.faces(request)
+        if request.url.host.endswith("googleapis.com"):
+            return self.google(request)
         self.requests.append(request)
         path = request.url.path
         if request.url.host == "weather":
             if not self.weather_up:
                 return httpx.Response(503, json={"error": "down", "code": "weather_unavailable"})
-            return httpx.Response(200, json={**WEATHER, "units": {"temperature": "°C" if request.url.params["units"] == "metric" else "°F", "speed": "x"}})
+            return httpx.Response(200, json={**WEATHER, "units": {"temperature": "C" if request.url.params["units"] == "metric" else "F", "speed": "x"}})
 
         assert request.headers["authorization"] == "Bearer service-key"
         assert request.headers["x-person-id"] == "3"
@@ -154,8 +192,8 @@ def backends() -> FakeBackends:
     return FakeBackends()
 
 
-def client_for(backends: FakeBackends, widgets: list[WidgetPlacement]) -> TestClient:
-    app = create_app(SETTINGS, store=FakeStore(widgets), transport=httpx.MockTransport(backends))
+def client_for(backends: FakeBackends, widgets: list[WidgetPlacement], settings: Settings = SETTINGS) -> TestClient:
+    app = create_app(settings, store=FakeStore(widgets), transport=httpx.MockTransport(backends))
     return TestClient(app)
 
 
@@ -335,7 +373,7 @@ def test_full_mirror(backends):
 
     text = widget(body, "summary")["data"]["text"]
     assert "1 assignment due in the next 3 days, 1 overdue. 1 new announcement since yesterday." in text
-    assert "Overcast, high of 44°F, 40% chance of rain." in text
+    assert "Overcast, high of 44\u00b0F, 40% chance of rain." in text
 
 
 def test_each_source_fetched_once(backends):
@@ -356,7 +394,7 @@ def test_units_follow_weather_widget_setting(backends):
     with client_for(backends, [placement("weather", {"units": "metric"})]) as client:
         body = load_mirror(client)
     assert backends.requests[0].url.params["units"] == "metric"
-    assert widget(body, "weather")["data"]["units"]["temperature"] == "°C"
+    assert widget(body, "weather")["data"]["units"]["temperature"] == "C"
 
 
 def test_not_signed_in_only_affects_brightspace_widgets(backends):
@@ -390,6 +428,45 @@ def test_odd_data_only_affects_its_own_widgets(backends):
     assert "calendar" not in widget(body, "summary")["data"]["text"]   # the summary skips what it couldn't get
 
 
+def test_google_events_join_the_calendar(backends):
+    with client_for(backends, ALL, WITH_GOOGLE) as client:
+        token = blink_in(client)
+        body = client.get("/api/mirror", headers={"Authorization": f"Bearer {token}"}).json()
+        client.get("/api/mirror", headers={"Authorization": f"Bearer {token}"})
+
+    events = widget(body, "calendar")["data"]["events"]
+    # one list, soonest first. cancelled, declined and finished events are left out
+    assert [e["title"] for e in events] == ["Dentist", "Mum's birthday", "Quiz 3", "(no title)"]
+    assert events[0]["location"] == "Main St" and events[0]["course"] is None
+    assert events[1]["allDay"] is True and events[2]["course"] == "Algorithms"
+    # the access token is fetched once and reused
+    assert [r.url.host for r in backends.google_requests] == ["oauth2.googleapis.com", "www.googleapis.com", "www.googleapis.com"]
+
+
+def test_google_calendar_is_optional(backends):
+    # this server has no Google settings: nobody is asked
+    with client_for(backends, ALL) as client:
+        assert [e["title"] for e in widget(load_mirror(client), "calendar")["data"]["events"]] == ["Quiz 3"]
+    assert backends.google_requests == []
+
+
+def test_google_down_still_shows_brightspace(backends):
+    backends.google_up = False
+    with client_for(backends, ALL, WITH_GOOGLE) as client:
+        calendar = widget(load_mirror(client), "calendar")
+    assert calendar["error"] is None and [e["title"] for e in calendar["data"]["events"]] == ["Quiz 3"]
+
+
+def test_google_events_show_without_brightspace(backends):
+    backends.signed_in = False
+    with client_for(backends, ALL, WITH_GOOGLE) as client:
+        body = load_mirror(client)
+    calendar = widget(body, "calendar")
+    assert calendar["error"] is None and [e["title"] for e in calendar["data"]["events"]][:2] == ["Dentist", "Mum's birthday"]
+    assert widget(body, "assignments")["error"]["code"] == "signin_required"
+    assert "event" in widget(body, "summary")["data"]["text"]
+
+
 def test_summary_wording():
     now = datetime(2026, 11, 14, 9, 0, tzinfo=ZONE)
     event = Event("CS lecture", "CS", now + timedelta(hours=2), now + timedelta(hours=3), False, None)
@@ -416,5 +493,5 @@ def test_announcements(backends):
     assert items[0]["course"] == "Software Development, CMPT 435L"  # same post in two courses, shown once
     assert items[0]["text"] == "Class is in HC 2023 today."
     assert items[1]["course"] == "CMPT 435L"
-    assert len(items[1]["text"]) <= 281 and items[1]["text"].endswith("…")
+    assert len(items[1]["text"]) <= 283 and items[1]["text"].endswith("...")
     assert not any("/courses/13/" in str(r.url) for r in backends.requests)

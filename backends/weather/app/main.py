@@ -1,7 +1,5 @@
-"""
-Weather for the mirror's location. Run with:
-    uvicorn --factory app.main:create_app --port 3200
-"""
+# Weather for the mirror's location.
+# run: uvicorn --factory app.main:create_app --port 3200
 
 from __future__ import annotations
 
@@ -22,12 +20,11 @@ from .units import Units
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-# The NWS asks every client to identify itself.
+# NWS asks clients to identify themselves
 USER_AGENT = "Sumirrorize/1.0 (smart mirror weather service)"
 
 
 class WeatherSource:
-    """Fetches and caches the forecast and alerts for one location."""
 
     def __init__(self, settings: Settings, client: httpx.AsyncClient):
         lat, lon = settings.latitude, settings.longitude
@@ -83,7 +80,7 @@ def to_response(settings: Settings, forecast, alerts, unit: Units) -> Weather:
 
 
 def create_app(settings: Optional[Settings] = None, transport: Optional[httpx.AsyncBaseTransport] = None) -> FastAPI:
-    """`transport` lets tests swap in fake weather APIs."""
+    """`transport` is for tests."""
     settings = settings or load_settings()
 
     @asynccontextmanager

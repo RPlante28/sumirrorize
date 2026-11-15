@@ -1,7 +1,4 @@
-"""
-Fetching widget data from the other backends: d3l (Brightspace) and weather.
-Brightspace's raw data is trimmed down to what the mirror shows.
-"""
+# Gets widget data from d3l (Brightspace), weather and faces, trimmed to what the mirror shows.
 
 from __future__ import annotations
 
@@ -46,20 +43,19 @@ class Announcement:
     title: str
     course: Optional[str]
     posted: datetime
-    text: str   # plain text, one line, shortened
+    text: str  # one line, shortened
 
 
-# Announcements are per course, so a person with many courses means many requests.
+# announcements take one request per course
 ANNOUNCEMENT_REQUESTS_AT_ONCE = 8
 
 
-# Marist names courses like "CMPT_435L_112_26F ALGORITHM ANALYSISDESIGN": subject, number,
-# section, term, then a truncated title. The mirror shows just "CMPT 435L".
+# Marist course names look like "CMPT_435L_112_26F ALGORITHM ANALYSISDESIGN". We show "CMPT 435L".
 _SECTION_NAME = re.compile(r"^([A-Z]{2,5})_(\w+?)_\w+?_\w+\b")
 
 
 def course_name(name: Optional[str]) -> Optional[str]:
-    """A short course name for the mirror. Names in other formats are left as they are."""
+    """Short course name. Other formats are left alone."""
     if not name:
         return None
     match = _SECTION_NAME.match(name)
@@ -71,12 +67,12 @@ def _utc(text: str) -> datetime:
 
 
 def _brightspace_time(moment: datetime) -> str:
-    """Brightspace wants UTC with milliseconds, e.g. 2026-11-14T05:00:00.000Z."""
+    """UTC with milliseconds, e.g. 2026-11-14T05:00:00.000Z."""
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 class D3l:
-    """d3l, called with the service key on behalf of one person."""
+    """d3l, called with the service key for one person."""
 
     def __init__(self, client: httpx.AsyncClient, base_url: str, service_key: str):
         self._client = client
@@ -103,10 +99,7 @@ class D3l:
 
 
 class Brightspace:
-    """
-    One person's Brightspace data, for one mirror request. The course list is needed by
-    several widgets, so it's fetched once and shared.
-    """
+    """One person's Brightspace data for one request. The course list is fetched once and shared."""
 
     def __init__(self, d3l: D3l, person_id: int):
         self._d3l = d3l
@@ -160,7 +153,7 @@ class Brightspace:
             Assignment(i["ItemName"], course(i), _utc(i["DueDate"]), overdue=True)
             for i in overdue if i.get("DueDate")
         ]
-        # /due also returns past and finished work, so keep only what's still ahead and open.
+        # /due also returns past and finished work
         upcoming = [
             Assignment(i["ItemName"], course(i), _utc(i["DueDate"]), overdue=False)
             for i in due
@@ -182,7 +175,7 @@ class Brightspace:
                 except SourceError as error:
                     if error.code == "signin_required":
                         raise
-                    return []  # Brightspace refuses (403) courses whose access has ended
+                    return []  # 403 for courses whose access has ended
             found = []
             for item in items:
                 posted = item.get("StartDate") or item.get("CreatedDate")
@@ -201,7 +194,7 @@ class Brightspace:
         per_course = await asyncio.gather(*(from_course(c) for c in active))
         found = sorted((a for items in per_course for a in items), key=lambda a: a.posted, reverse=True)
 
-        # The same announcement is often posted to several courses: show it once, listing each course.
+        # the same announcement posted to several courses: show it once, listing the courses
         merged: dict[tuple[str, str], Announcement] = {}
         for item in found:
             key = (item.title, item.text)
@@ -218,7 +211,7 @@ def _snippet(text: str, limit: int = 280) -> str:
     flat = " ".join(text.split())
     if len(flat) <= limit:
         return flat
-    return flat[:limit].rsplit(" ", 1)[0] + "…"
+    return flat[:limit].rsplit(" ", 1)[0] + "..."
 
 
 class Weather:
@@ -238,13 +231,12 @@ class Weather:
 
 @dataclass(frozen=True)
 class Identified:
-    faces: int                     # how many faces were in the picture
-    person_id: Optional[int]       # who it is, if recognized
-    eyes_open: Optional[float]     # how open their eyes are, 0-1 (None if no face is close enough)
+    faces: int  # faces in the picture
+    person_id: Optional[int]  # who it is, if recognized
+    eyes_open: Optional[float]  # 0-1, None if nobody is close enough
 
 
 class Faces:
-    """The faces service: works out who's in a camera frame."""
 
     def __init__(self, client: httpx.AsyncClient, base_url: str, api_key: str):
         self._client = client

@@ -1,7 +1,7 @@
 import { BAS, LE, LP } from "./config.js";
 
-// App route -> Brightspace API path. ":params" are copied across and query strings are passed
-// through. "{me}" and "{courses}" are filled in by the server (see lookups in index.ts).
+// app route -> Brightspace API path. ":params" are copied across and query strings passed through.
+// "{me}" and "{courses}" are filled in by the server (lookups in index.ts)
 export const jsonRoutes: Record<string, string> = {
   "/me": `${LP}/users/whoami`,
   "/profile": `${LP}/profile/myProfile`,

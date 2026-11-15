@@ -82,7 +82,7 @@ def test_imperial_weather(fake):
 
     assert body["location"] == {"label": "Poughkeepsie, NY", "latitude": 41.7225,
                                 "longitude": -73.9343, "timezone": "America/New_York"}
-    assert body["units"] == {"temperature": "°F", "speed": "mph"}
+    assert body["units"] == {"temperature": "F", "speed": "mph"}
     assert body["current"] == {
         "temperature": 41.0, "feelsLike": 35.6, "humidity": 70, "windSpeed": 10.0, "windGusts": 20.0,
         "windDirection": "NW", "description": "Light rain", "weatherCode": 61, "isDay": True,
@@ -111,7 +111,7 @@ def test_metric(fake):
     with client_for(fake) as client:
         body = client.get("/weather", params={"units": "metric"}).json()
 
-    assert body["units"] == {"temperature": "°C", "speed": "km/h"}
+    assert body["units"] == {"temperature": "C", "speed": "km/h"}
     assert body["current"]["temperature"] == 5.0
     assert body["current"]["windSpeed"] == 16.1
     assert body["today"]["high"] == 10.0

@@ -1,4 +1,4 @@
-"""The JSON the service returns. Keys are camelCase to match d3l."""
+# the JSON we return. camelCase keys, same as d3l
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class Location(Model):
 
 
 class UnitLabels(Model):
-    temperature: str  # "°F" or "°C"
+    temperature: str  # "F" or "C"
     speed: str        # "mph" or "km/h"
 
 
@@ -33,7 +33,7 @@ class Current(Model):
     wind_gusts: float
     wind_direction: str           # compass point, e.g. "NW"
     description: str              # e.g. "Partly cloudy"
-    weather_code: int             # WMO code, for picking an icon
+    weather_code: int  # WMO code
     is_day: bool
 
 
@@ -72,10 +72,10 @@ class Weather(Model):
     current: Current
     today: Today
     hourly: list[Hour]
-    # None if alerts couldn't be fetched (different from [] = no alerts right now).
+    # None = couldn't fetch alerts, [] = none right now
     alerts: Optional[list[Alert]]
     updated_at: datetime          # when the forecast was fetched
-    # True if some of this is old data because the latest fetch failed.
+    # some of this is old because the last fetch failed
     stale: bool
 
 
