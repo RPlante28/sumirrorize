@@ -100,6 +100,7 @@ The pages call these, with the login cookie. Errors look like `{"error": "...", 
 | `PUT /me/units` | `{"units": "imperial"}` or `"metric"`: the mirror's weather units |
 | `DELETE /me/calendar` | Disconnects Google Calendar. To connect, send the browser to `/login?calendar=1` |
 | `PUT /me/widgets` | Saves every widget's visibility, position, size and visual variant |
+| `POST /me/widgets/reset` | Restores the signed-in person's default widget layout and styles |
 | `POST /me/api-key` | Makes a new API key (`{"apiKey": ...}`), shown once. The old one stops working |
 | `DELETE /me` | Deletes the account: face pictures, Brightspace login, calendar access, settings |
 | `POST /logout` | Signs out |

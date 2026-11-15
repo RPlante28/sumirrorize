@@ -63,6 +63,15 @@ class FakeStore:
         names = {widget["key"]: widget["name"] for widget in current}
         self.people[person_id]["widgets"] = [{**widget, "name": names[widget["key"]]} for widget in widgets]
 
+    def reset_widgets(self, person_id):
+        defaults = {
+            "clock": {"enabled": True, "x": .1, "y": .1, "w": .3, "h": .2, "variant": None},
+            "weather": {"enabled": True, "x": .6, "y": .1, "w": .3, "h": .2, "variant": None},
+        }
+        self.people[person_id]["widgets"] = [
+            {**widget, **defaults[widget["key"]]} for widget in self.people[person_id]["widgets"]
+        ]
+
     def new_api_key(self, person_id):
         key = f"key-{person_id}-{len(str(self.people))}"
         self.people[person_id]["key_hash"] = hashlib.sha256(key.encode()).digest()
@@ -252,6 +261,22 @@ def test_layout_save_is_all_or_nothing(world):
     response = send(client, "PUT", "/me/widgets", {"widgets": [before[0]]})
     assert response.status_code == 400 and response.json["code"] == "bad_layout"
     assert store.widgets(1) == before
+
+
+def test_layout_reset(world):
+    client, store, *_ = world
+    sign_in(client)
+    store.set_units(1, "metric")
+    widgets = store.widgets(1)
+    widgets[0] = {**widgets[0], "enabled": False, "x": .4, "variant": "time"}
+    store.set_widgets(1, widgets)
+
+    assert send(client, "POST", "/me/widgets/reset").json == {"ok": True}
+    assert store.widgets(1)[0] == {
+        "key": "clock", "name": "Clock", "enabled": True,
+        "x": .1, "y": .1, "w": .3, "h": .2, "variant": None,
+    }
+    assert store.units(1) == "metric"
 
 
 def test_save_faces(world):

@@ -148,6 +148,18 @@ document.getElementById("save-layout").addEventListener("click", async (event) =
   }
 });
 
+document.getElementById("reset-layout").addEventListener("click", async (event) => {
+  if (!confirm("Reset every widget to the default layout?")) return;
+  event.currentTarget.disabled = true;
+  try {
+    await api("POST", "/me/widgets/reset");
+    location.reload();
+  } catch (error) {
+    status.textContent = `Could not reset: ${error.message}`;
+    event.currentTarget.disabled = false;
+  }
+});
+
 widgetsToggle.addEventListener("click", () => {
   const open = document.body.classList.toggle("widgets-open");
   widgetsToggle.setAttribute("aria-expanded", String(open));

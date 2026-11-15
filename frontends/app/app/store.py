@@ -32,6 +32,7 @@ class Store(Protocol):
     def set_units(self, person_id: int, units: str) -> None: ...
     def widgets(self, person_id: int) -> list[dict[str, Any]]: ...
     def set_widgets(self, person_id: int, widgets: list[dict[str, Any]]) -> None: ...
+    def reset_widgets(self, person_id: int) -> None: ...
     def new_api_key(self, person_id: int) -> str: ...
     def calendar_token(self, person_id: int) -> Optional[bytes]: ...
     def save_calendar(self, person_id: int, sealed_token: bytes) -> None: ...
@@ -116,6 +117,22 @@ class PostgresStore:
                        WHERE person_id = %(person_id)s AND widget_key = %(key)s""",
                     [{**widget, "person_id": person_id} for widget in widgets],
                 )
+
+    def reset_widgets(self, person_id: int) -> None:
+        with self._pool.connection() as db:
+            db.execute(
+                """UPDATE person_widget pw
+                   SET enabled = w.default_enabled,
+                       x = w.default_x, y = w.default_y, w = w.default_w, h = w.default_h,
+                       settings = w.default_settings || CASE
+                           WHEN pw.widget_key = 'weather' AND pw.settings ? 'units'
+                           THEN jsonb_build_object('units', pw.settings->>'units')
+                           ELSE '{}'::jsonb
+                       END
+                   FROM widget w
+                   WHERE pw.person_id = %s AND pw.widget_key = w.widget_key""",
+                (person_id,),
+            )
 
     def new_api_key(self, person_id: int) -> str:
         """Replaces the person's API key, so the old one stops working."""

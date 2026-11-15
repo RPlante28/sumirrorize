@@ -314,6 +314,12 @@ def create_app(
             return jsonify(error=str(error), code="bad_layout"), 400
         return jsonify(ok=True)
 
+    @app.post("/me/widgets/reset")
+    @login_required
+    def reset_widgets():
+        db.reset_widgets(me().id)
+        return jsonify(ok=True)
+
     @app.post("/me/api-key")
     @login_required
     def new_api_key():
