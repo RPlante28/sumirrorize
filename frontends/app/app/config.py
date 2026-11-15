@@ -32,6 +32,12 @@ class Settings:
     d3l_public_url: str
     faces_url: str
     faces_api_key: str
+    # Ask for calendar access at every sign-in, not just from the Connect button. Only turn this
+    # on once the Google app is published: while it's in testing, Google turns away anyone who
+    # isn't a listed tester as soon as the calendar is asked for, so they couldn't sign in at all.
+    calendar_at_sign_in: bool = False
+    # shown on the privacy and terms pages
+    contact_email: str = ""
 
     @property
     def origin(self) -> str:
@@ -60,4 +66,6 @@ def load_settings() -> Settings:
         d3l_public_url=_required("D3L_PUBLIC_URL").rstrip("/"),
         faces_url=_required("FACES_URL").rstrip("/"),
         faces_api_key=_required("FACES_API_KEY"),
+        calendar_at_sign_in=os.environ.get("GOOGLE_CALENDAR_AT_SIGN_IN", "").lower() in ("1", "true", "yes"),
+        contact_email=os.environ.get("APP_CONTACT_EMAIL", "").strip(),
     )
