@@ -1,9 +1,9 @@
--- Sumirrorize schema. Postgres runs every file in db/init/ in name order, but only
--- when the data volume is empty (see db/README.md for how to apply changes).
+-- Sumirrorize schema. Postgres runs the files in db/init/ in name order, but only when the data
+-- volume is empty (db/README.md says how to change an existing database).
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Keeps updated_at honest without every caller having to remember it.
+-- keeps updated_at right without every caller having to remember
 CREATE FUNCTION touch_updated_at() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -12,33 +12,29 @@ BEGIN
 END;
 $$;
 
--- A fraction of the screen, so a layout looks the same on any screen size.
+-- a fraction of the screen, so a layout looks the same on any screen size
 CREATE DOMAIN screen_fraction AS real CHECK (VALUE BETWEEN 0 AND 1);
 
 
--- One row per person. Created the first time they sign in to the app (see 005_google_accounts.sql).
+-- One row per person, created the first time they sign in to the app (005_google_accounts.sql).
 CREATE TABLE person (
     person_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     display_name text NOT NULL CHECK (btrim(display_name) <> ''),
-    -- SHA-256 of the person's API key. The key itself is shown to them once and never
-    -- stored, so a leaked database can't be used to read anyone's data.
+    -- SHA-256 of their API key. The key itself is shown once and never stored.
     api_key_hash bytea NOT NULL UNIQUE CHECK (octet_length(api_key_hash) = 32),
     created_at   timestamptz NOT NULL DEFAULT now()
 );
 
 
--- A person's set of pictures, any number of them. Uploading a new set replaces the whole
--- old set (delete + insert in one transaction; see db/README.md).
+-- A person's face pictures. A new upload replaces the whole set.
 CREATE TABLE picture (
     pic_id     bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     person_id  bigint NOT NULL REFERENCES person ON DELETE CASCADE,
-    -- Which shot this is, e.g. 'front', 'left', 'right'. Plain text so adding new
-    -- angles needs no schema change.
+    -- which shot this is: 'front', 'left', ... Plain text, so new angles need no schema change.
     angle      text NOT NULL CHECK (angle ~ '^[a-z][a-z0-9_]*$'),
     image      bytea NOT NULL CHECK (octet_length(image) BETWEEN 1 AND 10 * 1024 * 1024),
     mime_type  text NOT NULL CHECK (mime_type IN ('image/jpeg', 'image/png', 'image/webp')),
-    -- The 128-number face fingerprint from the face_recognition library. NULL when no
-    -- face was found, which is common for side-on shots.
+    -- 128-number face fingerprint from OpenCV's SFace model
     face_encoding vector(128),
     created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -46,12 +42,12 @@ CREATE TABLE picture (
 CREATE INDEX picture_person_id ON picture (person_id);
 
 
--- The widgets the mirror can show. Same for everyone; see 002_widgets.sql for the list.
+-- The widgets the mirror can show, same for everyone (002_widgets.sql has the list).
 CREATE TABLE widget (
     widget_key       text PRIMARY KEY CHECK (widget_key ~ '^[a-z][a-z0-9_]*$'),
     name             text NOT NULL,
     description      text NOT NULL,
-    -- What a new person starts with.
+    -- what a new person starts with
     default_enabled  boolean NOT NULL DEFAULT true,
     default_x        screen_fraction NOT NULL,
     default_y        screen_fraction NOT NULL,
@@ -62,18 +58,18 @@ CREATE TABLE widget (
 );
 
 
--- How one person has one widget set up. Every person has a row for every widget, so
--- reading a layout never has to fill in gaps.
+-- How one person has one widget set up. Everyone has a row for every widget, so reading a
+-- layout never has to fill in gaps.
 CREATE TABLE person_widget (
     person_id  bigint NOT NULL REFERENCES person ON DELETE CASCADE,
     widget_key text NOT NULL REFERENCES widget ON UPDATE CASCADE ON DELETE CASCADE,
     enabled    boolean NOT NULL,
-    -- Top-left corner (x, y) and size (w, h), as screen fractions.
+    -- top-left corner (x, y) and size (w, h), as screen fractions
     x          screen_fraction NOT NULL,
     y          screen_fraction NOT NULL,
     w          screen_fraction NOT NULL CHECK (w > 0),
     h          screen_fraction NOT NULL CHECK (h > 0),
-    -- Per-widget options, e.g. {"city": "Poughkeepsie"} for weather.
+    -- per-widget options, e.g. {"units": "metric"} for weather
     settings   jsonb NOT NULL CHECK (jsonb_typeof(settings) = 'object'),
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (person_id, widget_key),
@@ -83,7 +79,7 @@ CREATE TABLE person_widget (
 CREATE TRIGGER person_widget_touch BEFORE UPDATE ON person_widget
     FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
--- A new person gets every widget at its default layout.
+-- a new person gets every widget at its default layout
 CREATE FUNCTION give_new_person_widgets() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -98,7 +94,7 @@ $$;
 CREATE TRIGGER person_gets_widgets AFTER INSERT ON person
     FOR EACH ROW EXECUTE FUNCTION give_new_person_widgets();
 
--- A newly added widget is given to everyone who already exists.
+-- a newly added widget is given to everyone who already exists
 CREATE FUNCTION give_everyone_new_widget() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
