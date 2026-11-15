@@ -36,6 +36,8 @@ class Settings:
     # on once the Google app is published: while it's in testing, Google turns away anyone who
     # isn't a listed tester as soon as the calendar is asked for, so they couldn't sign in at all.
     calendar_at_sign_in: bool = False
+    # shown on the privacy and terms pages
+    contact_email: str = ""
 
     @property
     def origin(self) -> str:
@@ -65,4 +67,5 @@ def load_settings() -> Settings:
         faces_url=_required("FACES_URL").rstrip("/"),
         faces_api_key=_required("FACES_API_KEY"),
         calendar_at_sign_in=os.environ.get("GOOGLE_CALENDAR_AT_SIGN_IN", "").lower() in ("1", "true", "yes"),
+        contact_email=os.environ.get("APP_CONTACT_EMAIL", "").strip(),
     )

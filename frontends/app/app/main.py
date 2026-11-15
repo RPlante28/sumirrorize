@@ -217,6 +217,16 @@ def create_app(
     def face_pictures():
         return render_template("faceregistration.html")
 
+    # public, no sign-in needed: Google's OAuth consent screen links to these
+
+    @app.get("/privacy")
+    def privacy():
+        return render_template("privacy.html", contact_email=settings.contact_email)
+
+    @app.get("/terms")
+    def terms():
+        return render_template("terms.html", contact_email=settings.contact_email)
+
     # --- Google sign-in ---
 
     @app.get("/login")

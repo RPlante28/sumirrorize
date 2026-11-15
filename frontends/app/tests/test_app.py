@@ -347,6 +347,24 @@ def test_deleting_account_drops_calendar_access(world):
     assert google.revoked == ["alex-calendar-token"] and store.people == {}
 
 
+def test_privacy_and_terms_are_public(world):
+    client, *_ = world
+    privacy = client.get("/privacy")
+    assert privacy.status_code == 200
+    text = privacy.get_data(as_text=True)
+    assert "Google API Services" in text and "Limited Use" in text and "Delete my account" in text
+    assert client.get("/terms").status_code == 200 and b"Terms of Service" in client.get("/terms").data
+    # the sign-in page links to both, which Google checks for
+    home = client.get("/").get_data(as_text=True)
+    assert 'href="/privacy"' in home and 'href="/terms"' in home
+
+
+def test_contact_email_is_shown_when_set():
+    app = create_app(replace(SETTINGS, contact_email="team@mirror.example"), store=FakeStore(), google=FakeGoogle(),
+                     transport=httpx.MockTransport(FakeServices()))
+    assert b"mailto:team@mirror.example" in app.test_client().get("/privacy").data
+
+
 def test_security_headers(world):
     client, *_ = world
     headers = client.get("/").headers

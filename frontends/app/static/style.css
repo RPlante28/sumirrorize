@@ -353,3 +353,35 @@ input:checked + .slider:before {
     color: #666;
     margin-top: 12px;
 }
+
+/* Footer links, and the privacy and terms pages */
+
+.footer-links {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.footer-links a {
+  color: #292929;
+}
+
+.legal {
+  line-height: 1.55;
+}
+
+.legal h2 {
+  font-size: 18px;
+  margin: 26px 0 6px;
+}
+
+.legal li {
+  margin-bottom: 8px;
+}
+
+.legal a, .description a {
+  color: #8c2029;
+}

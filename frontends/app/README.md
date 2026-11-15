@@ -85,7 +85,9 @@ a listed tester before they could sign in at all.
 
 ## Routes
 
-Pages: `/` (sign-in, or settings once signed in), `/faces` (face pictures).
+Pages: `/` (sign-in, or settings once signed in), `/faces` (face pictures), and `/privacy` and
+`/terms`, which anyone can open. Google's OAuth consent screen asks for those three links (home
+page, privacy policy, terms of service). `APP_CONTACT_EMAIL` sets the contact shown on them.
 
 The pages call these, with the login cookie. Errors look like `{"error": "...", "code": "..."}`.
 

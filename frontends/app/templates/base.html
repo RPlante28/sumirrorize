@@ -18,6 +18,11 @@
 
   <footer>
     <img class="footer-img" src="{{ url_for('static', filename='img/OurLogo.png') }}" alt="Sumirrorize logo">
+    <nav class="footer-links">
+      <a href="{{ url_for('home') }}">Home</a>
+      <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+      <a href="{{ url_for('terms') }}">Terms of Service</a>
+    </nav>
   </footer>
 </body>
 </html>
