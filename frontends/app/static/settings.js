@@ -93,17 +93,18 @@ function unitLabel(units) {
 }
 
 async function saveUnits() {
-  const toggle = $("unitSwitch");
-  const units = toggle.checked ? "imperial" : "metric";
-  toggle.disabled = true;
+  const select = $("unitSwitch");
+  const units = select.value;
+  const previous = units === "imperial" ? "metric" : "imperial";
+  select.disabled = true;
   try {
     await api("PUT", "/me/units", { units });
     $("unitLabel").textContent = unitLabel(units);
   } catch (error) {
-    toggle.checked = !toggle.checked; // put it back
+    select.value = previous;
     $("unitLabel").textContent = error.message;
   } finally {
-    toggle.disabled = false;
+    select.disabled = false;
   }
 }
 
@@ -136,7 +137,7 @@ async function deleteAccount() {
 }
 
 setBrightspace($("bs-status").dataset.state);
-$("unitLabel").textContent = unitLabel($("unitSwitch").checked ? "imperial" : "metric");
+$("unitLabel").textContent = unitLabel($("unitSwitch").value);
 $("bs-connect").addEventListener("click", connect);
 $("bs-disconnect").addEventListener("click", disconnect);
 $("cal-disconnect")?.addEventListener("click", disconnectCalendar);

@@ -49,8 +49,9 @@ def placement(key: str, settings: Optional[dict] = None) -> WidgetPlacement:
 
 
 class FakeStore:
-    def __init__(self, widgets: list[WidgetPlacement]):
+    def __init__(self, widgets: list[WidgetPlacement], units: str = "imperial"):
         self.widgets = widgets
+        self.units = units
 
     async def person(self, person_id):
         return {3: Person(3, "Alex Smith"), 4: Person(4, "Riley Jones")}.get(person_id)
@@ -61,6 +62,9 @@ class FakeStore:
     async def google_token(self, person_id):
         # person 3 has connected their Google Calendar
         return Fernet(TOKEN_KEY).encrypt(b"3:alex-refresh-token") if person_id == 3 else None
+
+    async def weather_units(self, person_id):
+        return self.units
 
 
 WEATHER = {
@@ -192,8 +196,9 @@ def backends() -> FakeBackends:
     return FakeBackends()
 
 
-def client_for(backends: FakeBackends, widgets: list[WidgetPlacement], settings: Settings = SETTINGS) -> TestClient:
-    app = create_app(settings, store=FakeStore(widgets), transport=httpx.MockTransport(backends))
+def client_for(backends: FakeBackends, widgets: list[WidgetPlacement], settings: Settings = SETTINGS,
+               units: str = "imperial") -> TestClient:
+    app = create_app(settings, store=FakeStore(widgets, units), transport=httpx.MockTransport(backends))
     return TestClient(app)
 
 
@@ -390,11 +395,19 @@ def test_only_needed_sources_fetched(backends):
     assert [r.url.host for r in backends.requests] == ["weather"]
 
 
-def test_units_follow_weather_widget_setting(backends):
-    with client_for(backends, [placement("weather", {"units": "metric"})]) as client:
+def test_units_follow_person_setting(backends):
+    with client_for(backends, [placement("weather")], units="metric") as client:
         body = load_mirror(client)
     assert backends.requests[0].url.params["units"] == "metric"
     assert widget(body, "weather")["data"]["units"]["temperature"] == "C"
+
+
+def test_units_still_apply_when_weather_widget_is_hidden(backends):
+    with client_for(backends, [placement("summary")], units="metric") as client:
+        body = load_mirror(client)
+    weather = next(request for request in backends.requests if request.url.host == "weather")
+    assert weather.url.params["units"] == "metric"
+    assert "°C" in widget(body, "summary")["data"]["text"]
 
 
 def test_not_signed_in_only_affects_brightspace_widgets(backends):

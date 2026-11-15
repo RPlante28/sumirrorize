@@ -60,7 +60,7 @@ person --< picture          any number, each labeled with its angle (front, left
 | `person` | `person_id`, `display_name`, `api_key_hash` (the SHA-256 of their API key; the key itself is never stored), and `google_sub`: the ID of the Google account they sign in to the app with. |
 | `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the face's fingerprint, 128 numbers from OpenCV's SFace model. A new upload replaces the person's whole set. Only the [faces service](../backends/faces/README.md) reads or writes this table; save faces through it rather than inserting rows yourself. |
 | `widget` | The widgets the mirror offers (`clock`, `greeting`, `summary`, `weather`, `calendar`, `assignments`, `announcements`), each with a description and a default layout. |
-| `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"units": "metric"}`). |
+| `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"units": "metric", "variant": "hourly"}`). |
 | `brightspace_session` | The person's saved Brightspace login, encrypted by d3l. Only d3l reads or writes it; ask d3l (`GET /session`) whether someone is signed in. |
 | `google_calendar` | The person's Google Calendar refresh token, encrypted by the sign-up app. The mirror backend reads it to fetch their events. A row exists only while their calendar is connected. |
 

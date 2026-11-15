@@ -1,13 +1,12 @@
 {% extends "base.html" %}
-{% block title %}My mirror | Sumirrorize{% endblock %}
+{% block title %}Settings · Sumirrorize{% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='settings.js') }}" type="module"></script>{% endblock %}
 {% block content %}
-  <h1>Hi, {{ person.name }}</h1>
-  <p class="description">When you step up to the mirror, it recognizes your face and shows your day.</p>
-  <hr>
+  <h1>Mirror settings</h1>
+  <p class="description">Hi, {{ person.name }}. Set up what your mirror recognizes and displays.</p>
 
   <section class="setting">
-    <h2>Your face</h2>
+    <h2>Face recognition</h2>
     {% if pictures is none %}
       <p class="status">Couldn't check right now. Reload in a minute.</p>
     {% elif pictures %}
@@ -24,7 +23,7 @@
     <p class="status" id="bs-status"
        data-state="{% if brightspace is none %}unknown{% elif brightspace.signedIn %}connected{% else %}disconnected{% endif %}">
     </p>
-    <button type="button" class="d2l-button d2l-button-sso-1" primary id="bs-connect">Connect Brightspace</button>
+    <button type="button" class="primary" id="bs-connect">Connect Brightspace</button>
     <button type="button" class="secondary" id="bs-disconnect" hidden>Disconnect</button>
     <p class="message retry" id="bs-error" role="alert" hidden></p>
   </section>
@@ -43,35 +42,40 @@
 
   <section class="setting">
     <h2>Weather units</h2>
-    <div class="unit-container">
-      <span>Metric (&deg;C)</span>
-      <label class="switch">
-        <input type="checkbox" id="unitSwitch" aria-label="Use Fahrenheit" {% if units == "imperial" %}checked{% endif %}>
-        <span class="slider"></span>
-      </label>
-      <span>Imperial (&deg;F)</span>
-    </div>
+    <label class="field" for="unitSwitch">Units</label>
+    <select id="unitSwitch">
+      <option value="imperial" {% if units == "imperial" %}selected{% endif %}>Fahrenheit (°F)</option>
+      <option value="metric" {% if units == "metric" %}selected{% endif %}>Celsius (°C)</option>
+    </select>
     <p id="unitLabel" role="status"></p>
   </section>
 
-  <section class="setting">
-    <h2>API key</h2>
-    <p class="description">For reading your Brightspace data from your own apps, at <code>{{ api_url }}</code>.</p>
+  <section class="setting layout-setting">
+    <h2>Widgets and layout</h2>
+    <p class="description">Choose widgets, change their style, and drag them into place.</p>
+    <a class="button primary" href="{{ url_for('layout') }}">Customize mirror</a>
+  </section>
+
+  <details class="setting">
+    <summary>Developer access</summary>
+    <p class="description">Create a key for reading your Brightspace data from your own apps at <code>{{ api_url }}</code>.</p>
     <button type="button" class="secondary" id="key-new">Make a new key</button>
     <div class="message success" id="key-shown" hidden>
       <code id="key"></code>
-      <p>Copy it now: it won't be shown again. Making another key turns this one off.</p>
+      <p>Copy it now. It will not be shown again, and making another key disables this one.</p>
     </div>
     <p class="message retry" id="key-error" role="alert" hidden></p>
-  </section>
+  </details>
 
-  <section class="setting">
-    <h2>Account</h2>
-    <form method="post" action="{{ url_for('logout') }}">
-      <button type="submit" class="secondary">Sign out</button>
-    </form>
-    <button type="button" class="danger" id="delete">Delete my account</button>
-    <p class="description">Deletes your face pictures, Brightspace and calendar connections, and settings.</p>
+  <details class="setting">
+    <summary>Account</summary>
+    <div class="account-actions">
+      <form method="post" action="{{ url_for('logout') }}">
+        <button type="submit" class="secondary">Sign out</button>
+      </form>
+      <button type="button" class="danger" id="delete">Delete my account</button>
+    </div>
+    <p class="description">Deleting your account permanently removes your face pictures, Brightspace and calendar connections, and settings.</p>
     <p class="message retry" id="delete-error" role="alert" hidden></p>
-  </section>
+  </details>
 {% endblock %}

@@ -120,7 +120,7 @@ function greetingWord(now) {
 const live = []; // parts that update every second (clock, greeting)
 
 const renderers = {
-  clock() {
+  clock(_data, settings) {
     const time = h("div", "clock-time");
     const date = h("div", "clock-date");
     live.push(() => {
@@ -129,13 +129,13 @@ const renderers = {
       time.replaceChildren(main, period ? h("small", null, period) : null);
       date.textContent = dateFmt.format(now);
     });
-    return [time, date];
+    return settings.variant === "time" ? [time] : [time, date];
   },
 
-  greeting(data) {
+  greeting(data, settings) {
     const el = h("div", null);
     live.push(() => {
-      const text = `${greetingWord(new Date())}, ${data.name}`;
+      const text = settings.variant === "name" ? data.name : `${greetingWord(new Date())}, ${data.name}`;
       if (el.textContent === text) return;
       el.textContent = text;
       const content = el.closest(".widget-content");
@@ -148,23 +148,26 @@ const renderers = {
     return [h("p", null, data.text || "Have a good day.")];
   },
 
-  weather(data) {
+  weather(data, settings) {
     const unit = data.units.temperature;
     const deg = (t) => `${Math.round(t)}\u00b0`;
     const c = data.current;
     const alert = data.alerts?.[0];
-    return [
+    const current = [
       alert ? h("div", "weather-alert", `Alert: ${alert.event}`) : null,
       h("div", "weather-now", icon(weatherIcon(c.weatherCode, c.isDay)), h("div", "weather-temp", deg(c.temperature))),
+    ];
+    if (settings.variant === "compact") return current;
+    return [...current,
       h("div", "weather-desc", `${c.description}, feels ${deg(c.feelsLike)}${unit}`),
       h("div", "weather-detail",
         `H ${deg(data.today.high)}  L ${deg(data.today.low)}, ${c.windDirection} ${Math.round(c.windSpeed)} ${data.units.speed}`),
-      h("div", "hourly", ...data.hourly.slice(1, 7).map((hour) => h("div", null,
+      settings.variant === "hourly" ? h("div", "hourly", ...data.hourly.slice(1, 7).map((hour) => h("div", null,
         h("div", "hour-time", hourFmt.format(new Date(hour.time))),
         icon(weatherIcon(hour.weatherCode, hour.isDay)),
         h("div", null, deg(hour.temperature)),
         h("div", "hour-rain", hour.precipitationChance >= 20 ? `${Math.round(hour.precipitationChance)}%` : " "),
-      ))),
+      ))) : null,
     ];
   },
 
@@ -206,14 +209,14 @@ const renderers = {
     return [h("div", "label", "Assignments"), list];
   },
 
-  announcements(data) {
+  announcements(data, settings) {
     const list = h("div", "list");
     if (data.announcements.length === 0) list.append(h("div", "empty", "No announcements in the last two weeks."));
     for (const item of data.announcements) {
       list.append(h("div", null,
         h("div", "ellipsis", item.title),
         h("div", "meta ellipsis", [item.course, postedText(new Date(item.posted))].filter(Boolean).join(", ")),
-        item.text ? h("div", "item-text", item.text) : null,
+        item.text && settings.variant !== "headlines" ? h("div", "item-text", item.text) : null,
       ));
     }
     return [h("div", "label", "Announcements"), list];
@@ -225,6 +228,9 @@ function renderWidget(widget) {
   // measure against a parent box). The saved position goes to the stylesheet as --x, --y, --w, --h.
   const box = h("div", "widget");
   box.dataset.key = widget.key;
+  box.dataset.variant = widget.settings?.variant ?? "default";
+  const center = widget.x + widget.w / 2;
+  box.dataset.align = center < 0.4 ? "left" : center > 0.6 ? "right" : "center";
   for (const side of ["x", "y", "w", "h"]) box.style.setProperty(`--${side}`, widget[side]);
 
   const content = h("div", `widget-content w-${widget.key}`);
@@ -234,7 +240,7 @@ function renderWidget(widget) {
       ? "Connect Brightspace in the app to see this."
       : `${widget.name} is unavailable right now.`));
   } else if (render) {
-    content.append(...render(widget.data).filter(Boolean));
+    content.append(...render(widget.data, widget.settings ?? {}).filter(Boolean));
   }
   box.append(content);
   return box;
