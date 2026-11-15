@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Face Registration · Sumirrorize{% endblock %}
+{% block header %}FACE REGISTER{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='faces.js') }}" type="module"></script>{% endblock %}
+{% block content %}
+  <h1>Register Your Face</h1>
+  <p class="description">Take a few pictures of your face from different angles so the mirror can
+    recognize you. Find good light and keep only yourself in view.</p>
+
+  <div class="progress">
+    <div class="progress-fill" id="progress"></div>
+  </div>
+
+  <div class="camera-box" id="camera-box">
+    <div class="step" id="stepTitle"></div>
+    <p id="instruction"></p>
+
+    <div class="camera-wrapper">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="canvas" hidden></canvas>
+    </div>
+
+    <button type="button" class="primary" id="capture" disabled>Capture Photo</button>
+    <button type="button" class="secondary" id="retry" hidden>Retake Photo</button>
+
+    <p class="message success" id="success" hidden>✓ Photo captured!</p>
+    <p class="message retry" id="error" role="alert" hidden></p>
+  </div>
+
+  <div class="checklist">
+    <h3>Capture Checklist</h3>
+    <div id="checklist"></div>
+  </div>
+
+  <div id="finish" hidden>
+    <h2>✓ Registration Complete!</h2>
+    <p>Your face is set up. Step up to the mirror to try it.</p>
+    <a class="button primary" href="{{ url_for('home') }}">Back to my mirror</a>
+  </div>
+
+  <p><a href="{{ url_for('home') }}">Cancel</a></p>
+{% endblock %}

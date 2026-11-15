@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Error · Sumirrorize{% endblock %}
+{% block content %}
+  <h1>Error</h1>
+  <p>{{ message or "Oops! An unexpected error occurred, please try again later." }}</p>
+  <a class="button primary" href="{{ url_for('home') }}">Back to the start</a>
+{% endblock %}

@@ -3,7 +3,8 @@
 | Folder | What | Status |
 |---|---|---|
 | [`mirror/`](mirror/README.md) | The mirror display, live at https://sumirrorize.marist.dev | Working |
-| `app/` | Simulates the phone app: sign-up with pictures, widget layout, Brightspace sign-in | Not started |
+| [`app/`](app/README.md) | The sign-up app: Google sign-in, face pictures, Brightspace, settings. At https://sumirrorize-api.marist.dev | Working |
 
-Each one talks only to its own backend in [`../backends/`](../backends/README.md), except that the
-app frontend opens d3l's Brightspace sign-in tab directly (see `../backends/d3l/README.md`).
+The mirror page talks only to its backend in [`../backends/mirror`](../backends/mirror/README.md).
+The app is a small Flask server that renders its own pages, so it's its own backend; it also
+opens d3l's Brightspace sign-in tab, which shares its address under `/api/`.

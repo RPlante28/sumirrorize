@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}My mirror · Sumirrorize{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='settings.js') }}" type="module"></script>{% endblock %}
+{% block content %}
+  <h1>Hi, {{ person.name }}</h1>
+  <p class="description">When you step up to the mirror, it recognizes your face and shows your day.</p>
+  <hr>
+
+  <section class="setting">
+    <h2>Your face</h2>
+    {% if pictures is none %}
+      <p class="status">Couldn't check right now. Reload in a minute.</p>
+    {% elif pictures %}
+      <p class="status done">✓ Set up ({{ pictures }} pictures)</p>
+      <a class="button secondary" href="{{ url_for('face_pictures') }}">Retake pictures</a>
+    {% else %}
+      <p class="status">Not set up yet. The mirror needs a few pictures to recognize you.</p>
+      <a class="button primary" href="{{ url_for('face_pictures') }}">Take pictures</a>
+    {% endif %}
+  </section>
+
+  <section class="setting">
+    <h2>Brightspace</h2>
+    <p class="status" id="bs-status"
+       data-state="{% if brightspace is none %}unknown{% elif brightspace.signedIn %}connected{% else %}disconnected{% endif %}">
+    </p>
+    <button type="button" class="d2l-button d2l-button-sso-1" primary id="bs-connect">Connect Brightspace</button>
+    <button type="button" class="secondary" id="bs-disconnect" hidden>Disconnect</button>
+    <p class="message retry" id="bs-error" role="alert" hidden></p>
+  </section>
+
+  <section class="setting">
+    <h2>Weather units</h2>
+    <div class="unit-container">
+      <span>Metric (°C)</span>
+      <label class="switch">
+        <input type="checkbox" id="unitSwitch" aria-label="Use Fahrenheit" {% if units == "imperial" %}checked{% endif %}>
+        <span class="slider"></span>
+      </label>
+      <span>Imperial (°F)</span>
+    </div>
+    <p id="unitLabel" role="status"></p>
+  </section>
+
+  <section class="setting">
+    <h2>API key</h2>
+    <p class="description">For reading your Brightspace data from your own apps, at <code>{{ api_url }}</code>.</p>
+    <button type="button" class="secondary" id="key-new">Make a new key</button>
+    <div class="message success" id="key-shown" hidden>
+      <code id="key"></code>
+      <p>Copy it now: it won't be shown again. Making another key turns this one off.</p>
+    </div>
+    <p class="message retry" id="key-error" role="alert" hidden></p>
+  </section>
+
+  <section class="setting">
+    <h2>Account</h2>
+    <form method="post" action="{{ url_for('logout') }}">
+      <button type="submit" class="secondary">Sign out</button>
+    </form>
+    <button type="button" class="danger" id="delete">Delete my account</button>
+    <p class="description">Deletes your face pictures, Brightspace connection and settings.</p>
+    <p class="message retry" id="delete-error" role="alert" hidden></p>
+  </section>
+{% endblock %}
