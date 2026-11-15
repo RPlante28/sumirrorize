@@ -70,6 +70,17 @@ Things the database does for you:
 - Deleting a person deletes their pictures, widgets and Brightspace login.
 - `updated_at` is set automatically on every change.
 
+## Face photos are stored
+
+The `picture` table keeps each sign-up photo itself (`image`) next to its fingerprint
+(`face_encoding`). **Nothing reads the photos back:** recognition only compares fingerprints.
+They're kept so fingerprints could be remade if the face model ever changes.
+
+That means anyone who gets a copy of the database gets everyone's face photos. For the demo
+that's accepted. Before real use, stop storing them: have the faces service save only the
+fingerprint, and make `image` and `mime_type` optional (or drop them) in a new migration. A
+model change would then mean asking people to retake their pictures.
+
 ## Common queries
 
 **Sign up** (the [sign-up app](../frontends/app/README.md) does this on someone's first Google
