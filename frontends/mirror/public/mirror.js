@@ -402,6 +402,7 @@ const session = {
   blink: null,  // blink progress, goes back with the next frame
   lastFace: 0,
   lastConfirmed: 0,
+  viewLock: false,
 };
 let refreshTimer = null;
 
@@ -410,11 +411,23 @@ function update(result, now) {
   const recognized = result.person;
   if (result.faces > 0) session.lastFace = now;
   session.blink = result.blink ?? null;
+  if (session.person?.id === recognized?.id && typeof result.viewLock === "boolean") {
+    session.viewLock = result.viewLock;
+  }
+
+  if (session.person && session.viewLock) {
+    Object.assign(session, { waiting: null, streak: 0, blink: null });
+    if (recognized?.id === session.person.id && result.pass) {
+      Object.assign(session, { pass: result.pass, lastConfirmed: now });
+    } else if (now - session.lastConfirmed > SESSION_TIMEOUT_MS) showNobody();
+    return;
+  }
 
   // they've blinked, or the mirror is already open for them
   if (recognized && result.pass) {
     const arrived = session.person?.id !== recognized.id;
-    Object.assign(session, { person: recognized, pass: result.pass, lastConfirmed: now, waiting: null, streak: 0 });
+    Object.assign(session, { person: recognized, pass: result.pass, lastConfirmed: now,
+      waiting: null, streak: 0, viewLock: Boolean(result.viewLock) });
     if (arrived) showPerson();
     return;
   }
@@ -444,7 +457,7 @@ async function showPerson() {
 
 // takes the open mirror off the screen (and out of the page)
 function closeMirror() {
-  Object.assign(session, { person: null, pass: null });
+  Object.assign(session, { person: null, pass: null, viewLock: false });
   clearInterval(refreshTimer);
   shown = null;
   $("widgets").replaceChildren();

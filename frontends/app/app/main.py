@@ -304,6 +304,16 @@ def create_app(
         db.set_units(me().id, units)
         return jsonify(units=units)
 
+    @app.put("/me/view-lock")
+    @login_required
+    def save_view_lock():
+        body = request.get_json(silent=True)
+        enabled = body.get("enabled") if isinstance(body, dict) else None
+        if not isinstance(enabled, bool):
+            return jsonify(error="enabled must be true or false", code="bad_request"), 400
+        db.set_view_lock(me().id, enabled)
+        return jsonify(enabled=enabled)
+
     @app.put("/me/widgets")
     @login_required
     def save_widgets():

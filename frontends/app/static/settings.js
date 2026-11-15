@@ -108,6 +108,22 @@ async function saveUnits() {
   }
 }
 
+// --- View Lock ---
+
+async function saveViewLock() {
+  const input = $("viewLock");
+  input.disabled = true;
+  try {
+    await api("PUT", "/me/view-lock", { enabled: input.checked });
+    $("viewLockStatus").textContent = input.checked ? "View Lock is on." : "View Lock is off.";
+  } catch (error) {
+    input.checked = !input.checked;
+    $("viewLockStatus").textContent = error.message;
+  } finally {
+    input.disabled = false;
+  }
+}
+
 // --- API key ---
 
 async function newKey() {
@@ -142,5 +158,6 @@ $("bs-connect").addEventListener("click", connect);
 $("bs-disconnect").addEventListener("click", disconnect);
 $("cal-disconnect")?.addEventListener("click", disconnectCalendar);
 $("unitSwitch").addEventListener("change", saveUnits);
+$("viewLock").addEventListener("change", saveViewLock);
 $("key-new").addEventListener("click", newKey);
 $("delete").addEventListener("click", deleteAccount);

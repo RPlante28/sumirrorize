@@ -56,6 +56,16 @@
     <a class="button primary" href="{{ url_for('layout') }}">Customize mirror</a>
   </section>
 
+  <section class="setting">
+    <h2>View Lock</h2>
+    <label class="check-field" for="viewLock">
+      <input id="viewLock" type="checkbox" {% if person.view_lock %}checked{% endif %}>
+      Keep my information on screen when other people enter the frame
+    </label>
+    <p class="description">You keep control until you leave the mirror or press Escape.</p>
+    <p id="viewLockStatus" role="status"></p>
+  </section>
+
   <details class="setting">
     <summary>Developer access</summary>
     <p class="description">Create a key for reading your Brightspace data from your own apps at <code>{{ api_url }}</code>.</p>

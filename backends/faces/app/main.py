@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .config import Settings, load_settings
-from .engine import BadImage, Engine, OpenCvEngine, enrollment_problem, mirror_face, other_people
+from .engine import BadImage, Engine, OpenCvEngine, enrollment_problem, mirror_faces, other_people
 from .store import NewPicture, PostgresStore, Store
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -103,8 +103,26 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
         if not image or len(image) > MAX_IMAGE_BYTES:
             raise ApiError(413, "Send one image under 5 MB as the request body", "too_large")
         analysis = await analyze(request, image)
-        face = mirror_face(analysis)
-        match = await request.app.state.store.closest(face.fingerprint) if face is not None else None
+        preferred = request.headers.get("x-prefer-person-id")
+        try:
+            preferred_id = int(preferred) if preferred is not None else None
+        except ValueError:
+            raise ApiError(400, "X-Prefer-Person-Id must be a person ID", "bad_request") from None
+        if preferred_id is not None and preferred_id < 1:
+            raise ApiError(400, "X-Prefer-Person-Id must be a person ID", "bad_request")
+
+        faces = mirror_faces(analysis)
+        face = faces[0] if faces else None
+        match = await request.app.state.store.closest(face.fingerprint) if face else None
+        preferred_found = (match is not None and match.similarity >= settings.match_threshold
+                           and match.person_id == preferred_id)
+        if preferred_id is not None and not preferred_found:
+            for candidate in faces[1:]:
+                candidate_match = await request.app.state.store.closest(candidate.fingerprint)
+                if (candidate_match is not None and candidate_match.similarity >= settings.match_threshold
+                        and candidate_match.person_id == preferred_id):
+                    face, match = candidate, candidate_match
+                    break
         recognized = match is not None and match.similarity >= settings.match_threshold
         return {
             "faces": len(analysis.faces),

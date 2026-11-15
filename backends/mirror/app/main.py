@@ -99,19 +99,25 @@ def create_app(
             raise ApiError(413, "Send one image under 2 MB", "too_large")
 
         state = request.app.state
+        holder = pass_holder(request)
+        owner = await state.store.person(holder) if holder is not None else None
+        preferred = holder if owner and owner.view_lock else None
         try:
-            found = await state.faces.identify(frame, content_type)
+            found = await state.faces.identify(frame, content_type, preferred)
         except SourceError as error:
             raise ApiError(400 if error.code == "bad_image" else 503, error.message, error.code) from None
 
-        person = await state.store.person(found.person_id) if found.person_id is not None else None
+        person = owner if owner and found.person_id == owner.id else (
+            await state.store.person(found.person_id) if found.person_id is not None else None
+        )
         answer = {"faces": found.faces, "person": None, "pass": None, "expiresAt": None, "blink": None}
         if person is None:
             return answer
         answer["person"] = {"id": person.id, "name": person.name}
+        answer["viewLock"] = person.view_lock
 
         progress = None
-        blinked = pass_holder(request) == person.id  # already let in and still here
+        blinked = holder == person.id  # already let in and still here
         if not blinked:
             blinked, progress = blink.step(request.headers.get("x-blink"), person.id, found.eyes_open, time.time())
         if blinked:
@@ -130,6 +136,7 @@ def create_app(
         units = await state.store.weather_units(person_id)
         return {
             "person": {"id": person.id, "name": person.name},
+            "viewLock": person.view_lock,
             "timezone": settings.timezone.key,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "widgets": await widgets.build(

@@ -243,12 +243,16 @@ class Faces:
         self._base_url = base_url
         self._api_key = api_key
 
-    async def identify(self, image: bytes, content_type: str) -> Identified:
+    async def identify(self, image: bytes, content_type: str,
+                       preferred_person_id: Optional[int] = None) -> Identified:
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": content_type}
+        if preferred_person_id is not None:
+            headers["X-Prefer-Person-Id"] = str(preferred_person_id)
         try:
             response = await self._client.post(
                 f"{self._base_url}/identify",
                 content=image,
-                headers={"Authorization": f"Bearer {self._api_key}", "Content-Type": content_type},
+                headers=headers,
             )
         except httpx.HTTPError as error:
             raise SourceError("faces_unavailable", f"Couldn't reach the faces service: {error!r}") from error

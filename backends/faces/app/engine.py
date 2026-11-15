@@ -145,7 +145,6 @@ def other_people(fingerprints: list[np.ndarray], threshold: float) -> set[int]:
     return {i for i in range(len(fingerprints)) if alike[typical, i] < threshold}
 
 
-def mirror_face(analysis: Analysis) -> Optional[Face]:
-    """The largest face, if it's close enough."""
-    face = analysis.largest
-    return face if face and face.width >= MIN_MIRROR_FACE else None
+def mirror_faces(analysis: Analysis) -> list[Face]:
+    """Faces close enough to use at the mirror, largest first."""
+    return [face for face in analysis.faces if face.width >= MIN_MIRROR_FACE]

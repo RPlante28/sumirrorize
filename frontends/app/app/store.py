@@ -17,6 +17,7 @@ DEFAULT_UNITS = "imperial"  # used when the weather widget has no setting
 class Person:
     id: int
     name: str
+    view_lock: bool = False
 
 
 def make_api_key() -> tuple[str, bytes]:
@@ -30,6 +31,7 @@ class Store(Protocol):
     def sign_in(self, google_sub: str, name: str) -> tuple[Person, bool]: ...
     def units(self, person_id: int) -> str: ...
     def set_units(self, person_id: int, units: str) -> None: ...
+    def set_view_lock(self, person_id: int, enabled: bool) -> None: ...
     def widgets(self, person_id: int) -> list[dict[str, Any]]: ...
     def set_widgets(self, person_id: int, widgets: list[dict[str, Any]]) -> None: ...
     def reset_widgets(self, person_id: int) -> None: ...
@@ -49,13 +51,13 @@ class PostgresStore:
 
     def person(self, person_id: int) -> Optional[Person]:
         with self._pool.connection() as db:
-            row = db.execute("SELECT person_id, display_name FROM person WHERE person_id = %s",
+            row = db.execute("SELECT person_id, display_name, view_lock FROM person WHERE person_id = %s",
                              (person_id,)).fetchone()
         return Person(*row) if row else None
 
     def sign_in(self, google_sub: str, name: str) -> tuple[Person, bool]:
         """The person with this Google account, made on their first sign-in. True if just made."""
-        find = "SELECT person_id, display_name FROM person WHERE google_sub = %s"
+        find = "SELECT person_id, display_name, view_lock FROM person WHERE google_sub = %s"
         with self._pool.connection() as db:
             row = db.execute(find, (google_sub,)).fetchone()
             if row:
@@ -64,7 +66,7 @@ class PostgresStore:
             _, key_hash = make_api_key()
             row = db.execute(
                 """INSERT INTO person (display_name, api_key_hash, google_sub) VALUES (%s, %s, %s)
-                   ON CONFLICT (google_sub) DO NOTHING RETURNING person_id, display_name""",
+                   ON CONFLICT (google_sub) DO NOTHING RETURNING person_id, display_name, view_lock""",
                 (name, key_hash, google_sub),
             ).fetchone()
             if row:
@@ -87,6 +89,10 @@ class PostgresStore:
                    WHERE person_id = %s AND widget_key = 'weather'""",
                 (units, person_id),
             )
+
+    def set_view_lock(self, person_id: int, enabled: bool) -> None:
+        with self._pool.connection() as db:
+            db.execute("UPDATE person SET view_lock = %s WHERE person_id = %s", (enabled, person_id))
 
     def widgets(self, person_id: int) -> list[dict[str, Any]]:
         with self._pool.connection() as db:

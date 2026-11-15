@@ -20,6 +20,7 @@ CREATE DOMAIN screen_fraction AS real CHECK (VALUE BETWEEN 0 AND 1);
 CREATE TABLE person (
     person_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     display_name text NOT NULL CHECK (btrim(display_name) <> ''),
+    view_lock    boolean NOT NULL DEFAULT false,
     -- SHA-256 of their API key. The key itself is shown once and never stored.
     api_key_hash bytea NOT NULL UNIQUE CHECK (octet_length(api_key_hash) = 32),
     created_at   timestamptz NOT NULL DEFAULT now()

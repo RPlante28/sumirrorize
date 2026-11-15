@@ -13,6 +13,7 @@ import asyncpg
 class Person:
     id: int
     name: str
+    view_lock: bool = False
 
 
 @dataclass(frozen=True)
@@ -49,9 +50,9 @@ class PostgresStore:
 
     async def person(self, person_id: int) -> Optional[Person]:
         row = await self._pool.fetchrow(
-            "SELECT person_id, display_name FROM person WHERE person_id = $1", person_id
+            "SELECT person_id, display_name, view_lock FROM person WHERE person_id = $1", person_id
         )
-        return Person(row["person_id"], row["display_name"]) if row else None
+        return Person(row["person_id"], row["display_name"], row["view_lock"]) if row else None
 
     async def google_token(self, person_id: int) -> Optional[bytes]:
         """Their Google Calendar token as the app saved it (encrypted), or None if it isn't connected."""

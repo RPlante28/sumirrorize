@@ -46,6 +46,8 @@ summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outli
 
 select { min-width: 190px; padding: 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--bar); color: var(--text); }
 .field { display: block; margin-bottom: 4px; font-weight: 600; }
+.check-field { display: flex; align-items: flex-start; gap: 8px; font-weight: 600; }
+.check-field input { margin-top: 3px; }
 .setting { display: block; padding: 18px 0; border-bottom: 1px solid var(--border); }
 .setting:last-child { border-bottom: 0; }
 .setting .button, .setting button { margin-top: 8px; }
