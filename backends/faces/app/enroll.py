@@ -1,6 +1,6 @@
 """
 Save someone's face from photo files, through the same route the sign-up app uses. For testing
-until the sign-up app sends faces itself. The faces container is read-only, so run this from a
+with photos taken elsewhere. The faces container is read-only, so run this from a
 throwaway container on the same network with the photos mounted:
 
     docker run --rm --network sumirrorize -v /path/to/photos:/photos:ro \

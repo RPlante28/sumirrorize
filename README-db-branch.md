@@ -60,7 +60,7 @@ checkout at `/home/nathan1/projects/sumirrorize`.
 | Container | What | Reachable at |
 |---|---|---|
 | `sumirrorize-db` | Postgres + pgvector | `sumirrorize-db:5432` on the `sumirrorize` Docker network only |
-| `sumirrorize-d3l` | d3l | `https://sumirrorize-api.marist.dev` (Cloudflare tunnel → Traefik), and `http://sumirrorize-d3l:3100` on the `sumirrorize` network |
+| `sumirrorize-d3l` | d3l | `https://sumirrorize-api.marist.dev/api` (Cloudflare tunnel → Traefik), and `http://sumirrorize-d3l:3100` on the `sumirrorize` network |
 
 - **Public hostname:** `sumirrorize-api.marist.dev` needs a Public Hostname in the Cloudflare
   tunnel pointing at `http://traefik:80`, like every other site. Traefik picks the route up from
@@ -82,6 +82,11 @@ checkout at `/home/nathan1/projects/sumirrorize`.
 
 ## For the phone-app frontend/backend
 
+> **Since this branch:** this is built now. The sign-up app ([frontends/app](frontends/app/README.md))
+> creates people on their first Google sign-in and has the Connect Brightspace button. It took
+> over `sumirrorize-api.marist.dev`, and d3l moved under `/api/` there (the addresses below are
+> updated to match).
+
 ### Creating a person
 
 Nothing does this yet. The backend should do it when someone submits their name and pictures,
@@ -100,7 +105,7 @@ The database stores only the hash, so a lost key can't be recovered. To make a n
 ### The "Connect Brightspace" button
 
 ```js
-const D3L = "https://sumirrorize-api.marist.dev";   // http://localhost:3100 locally
+const D3L = "https://sumirrorize-api.marist.dev/api";   // http://localhost:3100 locally
 
 async function connectBrightspace(apiKey) {
   // Open the tab right away, inside the click handler. Opening it after an `await` gets it
@@ -145,11 +150,11 @@ Done once on the server (see below). To repeat it:
 docker exec sumirrorize-db psql -U sumirrorize -c \
   "INSERT INTO person (display_name, api_key_hash) VALUES ('Test', sha256('my-long-test-key')) RETURNING person_id"
 
-curl -X POST -H "Authorization: Bearer my-long-test-key" https://sumirrorize-api.marist.dev/login
-# open https://sumirrorize-api.marist.dev<path from the reply> in a browser and sign in
+curl -X POST -H "Authorization: Bearer my-long-test-key" https://sumirrorize-api.marist.dev/api/login
+# open https://sumirrorize-api.marist.dev/api<path from the reply> in a browser and sign in
 
-curl -H "Authorization: Bearer my-long-test-key" https://sumirrorize-api.marist.dev/session
-curl -H "Authorization: Bearer my-long-test-key" https://sumirrorize-api.marist.dev/due
+curl -H "Authorization: Bearer my-long-test-key" https://sumirrorize-api.marist.dev/api/session
+curl -H "Authorization: Bearer my-long-test-key" https://sumirrorize-api.marist.dev/api/due
 
 # Clean up
 docker exec sumirrorize-db psql -U sumirrorize -c "DELETE FROM person WHERE display_name = 'Test'"

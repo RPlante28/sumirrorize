@@ -1,0 +1,289 @@
+"""Runs the app with a fake database, a fake Google and fake d3l and faces services."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+
+import httpx
+import pytest
+from flask import redirect
+
+from app.config import Settings
+from app.main import SignInFailed, create_app
+from app.store import DEFAULT_UNITS, Person
+
+ORIGIN = "https://mirror.example"
+SETTINGS = Settings(
+    public_url=ORIGIN, secret_key="s" * 32, database_url="unused",
+    google_client_id="id", google_client_secret="secret",
+    d3l_url="http://d3l", d3l_service_key="service-key", d3l_public_url=f"{ORIGIN}/api",
+    faces_url="http://faces", faces_api_key="faces-key",
+)
+
+
+class FakeStore:
+    def __init__(self):
+        self.people: dict[int, dict] = {}
+
+    def person(self, person_id):
+        p = self.people.get(person_id)
+        return Person(person_id, p["name"]) if p else None
+
+    def sign_in(self, google_sub, name):
+        for person_id, p in self.people.items():
+            if p["sub"] == google_sub:
+                return Person(person_id, p["name"]), False
+        person_id = len(self.people) + 1
+        self.people[person_id] = {"sub": google_sub, "name": name, "units": None, "key_hash": None}
+        return Person(person_id, name), True
+
+    def units(self, person_id):
+        return self.people[person_id]["units"] or DEFAULT_UNITS
+
+    def set_units(self, person_id, units):
+        self.people[person_id]["units"] = units
+
+    def new_api_key(self, person_id):
+        key = f"key-{person_id}-{len(str(self.people))}"
+        self.people[person_id]["key_hash"] = hashlib.sha256(key.encode()).digest()
+        return key
+
+    def delete_person(self, person_id):
+        del self.people[person_id]
+
+
+class FakeGoogle:
+    """Signs in whoever `account` says, or fails when it's None."""
+
+    def __init__(self):
+        self.account = {"sub": "google-alex", "given_name": "Alex"}
+        self.redirect_uri = None
+
+    def start(self, redirect_uri):
+        self.redirect_uri = redirect_uri
+        return redirect("https://accounts.google.com/o/oauth2/auth?fake")
+
+    def finish(self):
+        if self.account is None:
+            raise SignInFailed("access_denied")
+        return self.account
+
+
+class FakeServices:
+    """d3l and faces. Records each call; set `down` to make a service unreachable."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, str, dict]] = []
+        self.signed_in: set[int] = set()
+        self.pictures: dict[int, list] = {}
+        self.down: set[str] = set()
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        host, method, path = request.url.host, request.method, request.url.path
+        if host in self.down:
+            raise httpx.ConnectError("down")
+        self.calls.append((host, f"{method} {path}", dict(request.headers)))
+        if host == "d3l":
+            assert request.headers["authorization"] == "Bearer service-key"
+            person = int(request.headers["x-person-id"])
+            if (method, path) == ("POST", "/login"):
+                return httpx.Response(201, json={"path": "/login/one-time-token", "expiresAt": "soon"})
+            if (method, path) == ("GET", "/session"):
+                return httpx.Response(200, json={"signedIn": person in self.signed_in, "signedInAt": None,
+                                                 "signingIn": False})
+            if (method, path) == ("DELETE", "/session"):
+                self.signed_in.discard(person)
+                return httpx.Response(204)
+        if host == "faces":
+            assert request.headers["authorization"] == "Bearer faces-key"
+            person = int(path.split("/")[2])
+            if method == "GET":
+                return httpx.Response(200, json={"pictures": [{"angle": a, "savedAt": "x"}
+                                                              for a in self.pictures.get(person, [])]})
+            if method == "PUT":
+                pictures = json.loads(request.content)["pictures"]
+                problems = [{"angle": p["angle"], "problem": "too_small" if "small" in p["image"] else None}
+                            for p in pictures]
+                if any(p["problem"] for p in problems):
+                    return httpx.Response(422, json={"error": "Some pictures need retaking",
+                                                     "code": "poor_pictures", "pictures": problems})
+                self.pictures[person] = [p["angle"] for p in pictures]
+                return httpx.Response(200, json={"saved": len(pictures), "pictures": problems})
+        return httpx.Response(404, json={"error": "no route", "code": "not_found"})
+
+
+@pytest.fixture
+def world():
+    store, google, services = FakeStore(), FakeGoogle(), FakeServices()
+    app = create_app(SETTINGS, store=store, google=google, transport=httpx.MockTransport(services))
+    app.testing = True
+    client = app.test_client()
+    return client, store, google, services
+
+
+def sign_in(client):
+    return client.get("/login/callback?code=x&state=y")
+
+
+def send(client, method, path, body=None, origin=ORIGIN):
+    headers = {"Origin": origin} if origin else {}
+    return client.open(path, method=method, json=body, headers=headers)
+
+
+def test_signed_out(world):
+    client, *_ = world
+    page = client.get("/")
+    assert page.status_code == 200 and b"Continue with Google" in page.data
+    assert client.get("/faces").headers["Location"] == "/"
+    assert send(client, "PUT", "/me/units", {"units": "metric"}).json["code"] == "signed_out"
+
+
+def test_google_sign_in_makes_a_person_once(world):
+    client, store, google, _ = world
+    assert client.get("/login").status_code == 302
+    assert google.redirect_uri == f"{ORIGIN}/login/callback"
+
+    first = sign_in(client)
+    assert first.headers["Location"] == "/faces"  # new people start with their face pictures
+    assert store.people[1]["name"] == "Alex"
+
+    send(client, "POST", "/logout")
+    again = sign_in(client)
+    assert again.headers["Location"] == "/"
+    assert len(store.people) == 1
+
+
+def test_failed_google_sign_in(world):
+    client, store, google, _ = world
+    google.account = None
+    response = sign_in(client)
+    assert response.status_code == 400 and b"didn&#39;t finish" in response.data
+    assert store.people == {}
+
+
+def test_settings_page_shows_status(world):
+    client, _, _, services = world
+    sign_in(client)
+    page = client.get("/").get_data(as_text=True)
+    assert "Hi, Alex" in page and "Not set up yet" in page and 'data-state="disconnected"' in page
+
+    services.pictures[1] = ["front", "left"]
+    services.signed_in.add(1)
+    page = client.get("/").get_data(as_text=True)
+    assert "Set up (2 pictures)" in page and 'data-state="connected"' in page
+
+
+def test_settings_page_survives_services_down(world):
+    client, _, _, services = world
+    sign_in(client)
+    services.down |= {"d3l", "faces"}
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'data-state="unknown"' in page.get_data(as_text=True)
+
+
+def test_changes_need_our_origin(world):
+    client, store, *_ = world
+    sign_in(client)
+    for origin in (None, "https://evil.example"):
+        response = send(client, "PUT", "/me/units", {"units": "metric"}, origin=origin)
+        assert response.status_code == 403 and response.json["code"] == "bad_origin"
+    assert store.people[1]["units"] is None
+
+
+def test_units(world):
+    client, store, *_ = world
+    sign_in(client)
+    assert send(client, "PUT", "/me/units", {"units": "metric"}).json == {"units": "metric"}
+    assert store.people[1]["units"] == "metric"
+    assert send(client, "PUT", "/me/units", {"units": "kelvin"}).json["code"] == "bad_request"
+
+
+def test_save_faces(world):
+    client, _, _, services = world
+    sign_in(client)
+    pictures = [{"angle": "front", "image": "data:image/jpeg;base64,ok"},
+                {"angle": "left", "image": "data:image/jpeg;base64,ok"}]
+    assert send(client, "PUT", "/me/faces", {"pictures": pictures}).json["saved"] == 2
+    assert services.pictures[1] == ["front", "left"]
+
+
+def test_poor_faces_say_which_to_retake(world):
+    client, _, _, services = world
+    sign_in(client)
+    pictures = [{"angle": "front", "image": "data:image/jpeg;base64,ok"},
+                {"angle": "left", "image": "data:image/jpeg;base64,small"}]
+    response = send(client, "PUT", "/me/faces", {"pictures": pictures})
+    assert response.status_code == 422
+    assert response.json["code"] == "poor_pictures"
+    assert [p["problem"] for p in response.json["pictures"]] == [None, "too_small"]
+    assert 1 not in services.pictures
+
+
+def test_bad_face_requests(world):
+    client, _, _, services = world
+    sign_in(client)
+    assert send(client, "PUT", "/me/faces", {"pictures": []}).json["code"] == "bad_request"
+    assert send(client, "PUT", "/me/faces", {"nope": 1}).json["code"] == "bad_request"
+    services.down.add("faces")
+    response = send(client, "PUT", "/me/faces", {"pictures": [{"angle": "front", "image": "x"}]})
+    assert response.status_code == 503 and response.json["code"] == "faces_unavailable"
+
+
+def test_connect_brightspace(world):
+    client, _, _, services = world
+    sign_in(client)
+    started = send(client, "POST", "/me/brightspace").json
+    assert started["url"] == f"{ORIGIN}/api/login/one-time-token"
+    assert ("d3l", "POST /login") in [(h, c) for h, c, _ in services.calls]
+    assert services.calls[-1][2]["x-person-id"] == "1"
+
+    assert client.get("/me/brightspace").json["signedIn"] is False
+    services.signed_in.add(1)
+    assert client.get("/me/brightspace").json["signedIn"] is True
+    assert send(client, "DELETE", "/me/brightspace").status_code == 204
+    assert 1 not in services.signed_in
+
+
+def test_d3l_down(world):
+    client, _, _, services = world
+    sign_in(client)
+    services.down.add("d3l")
+    response = send(client, "POST", "/me/brightspace")
+    assert response.status_code == 503 and response.json["code"] == "d3l_unavailable"
+
+
+def test_api_key(world):
+    client, store, *_ = world
+    sign_in(client)
+    key = send(client, "POST", "/me/api-key").json["apiKey"]
+    assert store.people[1]["key_hash"] == hashlib.sha256(key.encode()).digest()
+
+
+def test_delete_account(world):
+    client, store, _, services = world
+    sign_in(client)
+    services.signed_in.add(1)
+    assert send(client, "DELETE", "/me").status_code == 204
+    assert store.people == {}
+    assert 1 not in services.signed_in  # d3l was told first
+    assert client.get("/").data.count(b"Continue with Google") == 1  # signed out
+
+
+def test_delete_account_waits_for_d3l(world):
+    client, store, _, services = world
+    sign_in(client)
+    services.down.add("d3l")
+    assert send(client, "DELETE", "/me").status_code == 503
+    assert 1 in store.people
+
+
+def test_security_headers(world):
+    client, *_ = world
+    headers = client.get("/").headers
+    assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+    assert "script-src" not in headers["Content-Security-Policy"]  # default-src 'self' covers it
+    assert headers["Permissions-Policy"].startswith("camera=(self)")
+    assert headers["Cache-Control"] == "no-store"
+    assert "no-store" not in client.get("/static/style.css").headers.get("Cache-Control", "")

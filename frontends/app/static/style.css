@@ -3,6 +3,11 @@
   font-family: Arial, sans-serif;
 }
 
+/* Pages show and hide things with the hidden attribute; this wins over any display rule below. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: #b2b4be;
@@ -61,11 +66,15 @@ h1 {
 .camera-wrapper {
     position: relative;
     width: 300px;
-    height: 340px;
+    height: 300px;
     margin: 0 auto;
 }
 
-video, #overlay {
+/* The canvas shows the photo just taken in the same circle. Both are flipped like a mirror,
+   which feels natural; the photo itself is saved unflipped. */
+video, canvas {
+    display: block;
+    transform: scaleX(-1);
     width: 300px;
     height: 300px;
     object-fit: cover;
@@ -76,18 +85,6 @@ video, #overlay {
     margin: 0 auto;
 }
 
-video {
-    z-index: 1;
-}
-
-#overlay {
-    z-index: 2;
-    pointer-events: none;
-}
-
-canvas {
-    display: none;
-}
 
 .step {
   color: #c91235;
@@ -95,7 +92,10 @@ canvas {
   margin: 15px 0 5px;
 }
 
-button {
+button, .button {
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
   border: none;
   padding: 14px 20px;
   border-radius: 7px;
@@ -117,12 +117,23 @@ button {
   margin-top: 10px;
 }
 
-button:hover {
+.danger {
+  background: #fff;
+  color: #8c2029;
+  border: 1px solid #8c2029;
+  margin-top: 10px;
+}
+
+button:hover, .button:hover {
   opacity: .85;
 }
 
+button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
 .message {
-  display: none;
   padding: 13px;
   border-radius: 7px;
   margin-top: 15px;
@@ -153,20 +164,51 @@ button:hover {
   font-weight: bold;
 }
 
-.footer-img {
-    max-width: 50%;
-    max-height: 50%;
-    position: absolute;
-    transform: scale(0.5);
+.problem {
+  color: #8c2029;
+  font-weight: bold;
+}
 
-    top: 65%;
-    right: -5%;
+footer {
+  text-align: center;
+  padding: 10px 0 30px;
+}
+
+.footer-img {
+    max-width: 160px;
+}
+
+/* Settings page */
+
+.setting {
+  padding: 8px 0 18px;
+  border-bottom: 1px solid #eee;
+}
+
+.setting:last-child {
+  border-bottom: none;
+}
+
+.setting h2 {
+  font-size: 18px;
+  margin: 12px 0 6px;
+}
+
+.status {
+  margin: 6px 0 4px;
+}
+
+code {
+  font-family: monospace;
+  word-break: break-all;
+  background: #f1f1f1;
+  padding: 2px 5px;
+  border-radius: 4px;
 }
 
 
 
 #finish {
-  display: none;
   text-align: center;
   padding: 25px;
   background: #e3f2e5;
@@ -209,6 +251,7 @@ button:hover {
 
 
 .google-btn {
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   /* justify-content: center; */

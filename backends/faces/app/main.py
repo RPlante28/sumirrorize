@@ -113,6 +113,15 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
             "match": {"personId": match.person_id, "similarity": round(match.similarity, 3)} if recognized else None,
         }
 
+    @app.get("/people/{person_id}/faces", dependencies=[Depends(require_key)])
+    async def saved(person_id: int, request: Request):
+        """Which pictures a person has saved (angles and dates only, never the pictures)."""
+        store = request.app.state.store
+        if not await store.person_exists(person_id):
+            raise ApiError(404, f"No person with ID {person_id}", "no_such_person")
+        return {"pictures": [{"angle": p.angle, "savedAt": p.created_at.isoformat()}
+                             for p in await store.saved_pictures(person_id)]}
+
     @app.put("/people/{person_id}/faces", dependencies=[Depends(require_key)])
     async def enroll(person_id: int, body: Enrollment, request: Request):
         """

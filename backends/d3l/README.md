@@ -7,6 +7,10 @@ It forwards requests to the [Brightspace API](https://docs.valence.desire2learn.
 as that person. Responses come back exactly as Brightspace sends them, with paged results merged
 into a single array.
 
+On the server it's at **https://sumirrorize-api.marist.dev/api/**, sharing the address with the
+[sign-up app](../../frontends/app/README.md). Traefik removes the `/api`, so the routes below are
+written without it: `/due` is `https://sumirrorize-api.marist.dev/api/due`.
+
 ## Setup
 
 d3l needs the Sumirrorize database running (see [../../db/README.md](../../db/README.md)).
@@ -34,8 +38,8 @@ Every request needs an `Authorization: Bearer <key>` header, in one of two forms
 
 | Caller | Sends | Gets |
 |---|---|---|
-| A person's app | their own API key (made when they signed up; see `db/README.md`) | that person's data |
-| The mirror's backend | `SERVICE_API_KEY` plus `X-Person-Id: <person_id>` | any person's data |
+| A person's own app | their own API key (from the sign-up app's settings page) | that person's data |
+| The sign-up app or the mirror's backend | `SERVICE_API_KEY` plus `X-Person-Id: <person_id>` | any person's data |
 
 Errors come back as `{ "error": "...", "code": "..." }`. Codes worth handling:
 

@@ -16,7 +16,7 @@ $$;
 CREATE DOMAIN screen_fraction AS real CHECK (VALUE BETWEEN 0 AND 1);
 
 
--- One row per person. Created when someone uploads their set of pictures.
+-- One row per person. Created the first time they sign in to the app (see 005_google_accounts.sql).
 CREATE TABLE person (
     person_id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     display_name text NOT NULL CHECK (btrim(display_name) <> ''),

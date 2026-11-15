@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional, Protocol, Sequence
 
 import asyncpg
@@ -18,6 +19,12 @@ class NewPicture:
 
 
 @dataclass(frozen=True)
+class SavedPicture:
+    angle: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class Match:
     person_id: int
     similarity: float
@@ -25,6 +32,7 @@ class Match:
 
 class Store(Protocol):
     async def person_exists(self, person_id: int) -> bool: ...
+    async def saved_pictures(self, person_id: int) -> list[SavedPicture]: ...
     async def replace_pictures(self, person_id: int, pictures: Sequence[NewPicture]) -> None: ...
     async def delete_pictures(self, person_id: int) -> int: ...
     async def closest(self, fingerprint: np.ndarray) -> Optional[Match]: ...
@@ -48,6 +56,11 @@ class PostgresStore:
 
     async def person_exists(self, person_id: int) -> bool:
         return bool(await self._pool.fetchval("SELECT 1 FROM person WHERE person_id = $1", person_id))
+
+    async def saved_pictures(self, person_id: int) -> list[SavedPicture]:
+        rows = await self._pool.fetch(
+            "SELECT angle, created_at FROM picture WHERE person_id = $1 ORDER BY pic_id", person_id)
+        return [SavedPicture(r["angle"], r["created_at"]) for r in rows]
 
     async def replace_pictures(self, person_id: int, pictures: Sequence[NewPicture]) -> None:
         # One transaction, so the mirror never sees half of an old set and half of a new one.

@@ -13,7 +13,7 @@ makes fingerprints. There's no training step, so new sign-ups are recognized rig
 Fingerprints live in the `picture` table and are compared by the database (pgvector).
 
 Internal only: on the server it's reachable only on the `sumirrorize` network, and every call
-needs `Authorization: Bearer <FACES_API_KEY>`. The mirror backend and (soon) the sign-up app call it.
+needs `Authorization: Bearer <FACES_API_KEY>`. The mirror backend and the sign-up app call it.
 
 ## How well it works
 
@@ -60,6 +60,15 @@ The body is one image (`Content-Type: image/jpeg`, PNG or WebP, under 5 MB).
 - **No match:** `match` is `null` when nobody is recognized. `faces` still says how many faces
   were seen, which the mirror uses to tell "a stranger is here" from "nobody is here".
 
+### `GET /people/{id}/faces`
+
+Which pictures a person has saved, without the pictures themselves. The sign-up app uses it to
+show whether someone's face is set up.
+
+```json
+{ "pictures": [ { "angle": "front", "savedAt": "2026-11-14T18:02:11+00:00" } ] }
+```
+
 ### `PUT /people/{id}/faces`
 
 Replaces a person's face pictures. The JSON body takes 1–20 pictures:
@@ -92,7 +101,7 @@ Replaces a person's face pictures. The JSON body takes 1–20 pictures:
 
 Deletes their pictures (`{ "deleted": 3 }`). They won't be recognized until they sign up again.
 
-### Saving faces from files (until the sign-up app does it)
+### Saving faces from files (for testing)
 
 `app/enroll.py` sends photo files through `PUT /people/{id}/faces`. The container is read-only,
 so run it from a throwaway container on the same network, with the photos mounted:

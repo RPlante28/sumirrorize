@@ -95,5 +95,24 @@ services:
     depends_on: [mirror]
     restart: unless-stopped
 
+  # The sign-up app: docker compose --profile d3l --profile mirror --profile app up -d --build
+  # Then open http://localhost:3500. Reads frontends/app/.env; addresses are filled in here.
+  app:
+    profiles: [app]
+    build: ./frontends/app
+    env_file: ./frontends/app/.env
+    environment:
+      DATABASE_URL: postgresql://sumirrorize:${POSTGRES_PASSWORD}@db:5432/sumirrorize
+      D3L_URL: http://d3l:3100
+      FACES_URL: http://faces:3400
+      FACES_API_KEY: ${FACES_API_KEY:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3500}:3500"
+    read_only: true
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
