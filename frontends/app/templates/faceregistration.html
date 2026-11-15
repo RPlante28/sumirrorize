@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Face Registration · Sumirrorize{% endblock %}
+{% block title %}Face Registration | Sumirrorize{% endblock %}
 {% block header %}FACE REGISTER{% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='faces.js') }}" type="module"></script>{% endblock %}
 {% block content %}
@@ -23,7 +23,7 @@
     <button type="button" class="primary" id="capture" disabled>Capture Photo</button>
     <button type="button" class="secondary" id="retry" hidden>Retake Photo</button>
 
-    <p class="message success" id="success" hidden>✓ Photo captured!</p>
+    <p class="message success" id="success" hidden>Photo captured!</p>
     <p class="message retry" id="error" role="alert" hidden></p>
   </div>
 
@@ -33,7 +33,7 @@
   </div>
 
   <div id="finish" hidden>
-    <h2>✓ Registration Complete!</h2>
+    <h2>Registration Complete!</h2>
     <p>Your face is set up. Step up to the mirror to try it.</p>
     <a class="button primary" href="{{ url_for('home') }}">Back to my mirror</a>
   </div>

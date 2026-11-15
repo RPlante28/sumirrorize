@@ -1,4 +1,4 @@
-"""Settings, read from environment variables (see .env.example)."""
+# settings come from env vars (see .env.example)
 
 from __future__ import annotations
 
@@ -16,25 +16,26 @@ def _required(name: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    # Where people open the app, e.g. https://sumirrorize-api.marist.dev. Google sends people
-    # back to <public_url>/login/callback, which must be listed in the Google OAuth client.
+    # where people open the app. Google sends them back to <public_url>/login/callback
     public_url: str
-    # Signs the login cookie. Changing it signs everyone out.
+    # signs the login cookie
     secret_key: str
     database_url: str
     google_client_id: str
     google_client_secret: str
-    # d3l inside the server network, and d3l's SERVICE_API_KEY.
+    # encrypts saved Google Calendar tokens. the mirror backend needs the same one
+    google_token_key: str
+    # d3l inside the server network, and its SERVICE_API_KEY
     d3l_url: str
     d3l_service_key: str
-    # Where people's browsers reach d3l, for the Brightspace sign-in tab.
+    # where browsers reach d3l, for the Brightspace sign-in tab
     d3l_public_url: str
     faces_url: str
     faces_api_key: str
 
     @property
     def origin(self) -> str:
-        """The scheme and host of public_url, which the browser sends as Origin."""
+        """Scheme and host of public_url, which browsers send as Origin."""
         parts = urlsplit(self.public_url)
         return f"{parts.scheme}://{parts.netloc}"
 
@@ -53,6 +54,7 @@ def load_settings() -> Settings:
         database_url=_required("DATABASE_URL"),
         google_client_id=_required("GOOGLE_CLIENT_ID"),
         google_client_secret=_required("GOOGLE_CLIENT_SECRET"),
+        google_token_key=_required("GOOGLE_TOKEN_KEY"),
         d3l_url=_required("D3L_URL").rstrip("/"),
         d3l_service_key=_required("D3L_SERVICE_KEY"),
         d3l_public_url=_required("D3L_PUBLIC_URL").rstrip("/"),

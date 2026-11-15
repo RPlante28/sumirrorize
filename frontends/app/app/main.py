@@ -1,16 +1,13 @@
-"""
-The sign-up app: people sign in with Google, take pictures of their face, connect Brightspace and
-pick their settings. Run with:
-    gunicorn 'app.main:create_app()' --bind 0.0.0.0:3500
-
-The browser only ever talks to this app (and to d3l's sign-in tab). The app saves people and
-settings in the database, sends face pictures to the faces service, and asks d3l to start
-Brightspace sign-ins, each over the internal network with its own key.
-"""
+# The sign-up app: Google sign-in, face pictures, connecting Brightspace, settings.
+# run: gunicorn 'app.main:create_app()' --bind 0.0.0.0:3500
+#
+# The browser only talks to this app (and d3l's sign-in tab). The app keeps people and settings
+# in the database, sends face pictures to faces and asks d3l to start Brightspace sign-ins.
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
 import httpx
@@ -21,26 +18,38 @@ from flask_login import LoginManager, UserMixin, current_user, login_required, l
 from .config import Settings, load_settings
 from .services import D3l, Faces, ServiceError
 from .store import UNITS, Person, PostgresStore, Store
+from .vault import Vault
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-MAX_BODY_BYTES = 10 * 1024 * 1024  # five face pictures, with room to spare
+MAX_BODY_BYTES = 10 * 1024 * 1024  # five face pictures with room to spare
 MAX_PICTURES = 20                  # the faces service's limit
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+# read-only access to events, for the mirror's calendar widget
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly"
 
 
 class SignInFailed(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class GoogleAccount:
+    sub: str                        # Google's ID for the account
+    name: str
+    calendar: bool                  # they let us read their calendar
+    refresh_token: Optional[str]    # only sent when they've just been asked
+
+
 class Google(Protocol):
-    def start(self, redirect_uri: str) -> Response: ...
-    def finish(self) -> dict[str, Any]: ...
+    def start(self, redirect_uri: str, ask_again: bool = False) -> Response: ...
+    def finish(self) -> GoogleAccount: ...
+    def revoke(self, refresh_token: str) -> None: ...
 
 
 class AuthlibGoogle:
-    """Google sign-in (OpenID Connect). Authlib checks the state and nonce and verifies the ID token."""
+    """Google sign-in (OpenID Connect) through Authlib, which checks the state, nonce and ID token."""
 
     def __init__(self, app: Flask, settings: Settings):
         self._client = OAuth(app).register(
@@ -48,22 +57,40 @@ class AuthlibGoogle:
             client_id=settings.google_client_id,
             client_secret=settings.google_client_secret,
             server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-            # Only who they are and their name; the app doesn't need their email.
-            client_kwargs={"scope": "openid profile"},
+            # who they are, their name, and their calendar events. no email
+            client_kwargs={"scope": f"openid profile {CALENDAR_SCOPE}"},
         )
 
-    def start(self, redirect_uri: str) -> Response:
-        return self._client.authorize_redirect(redirect_uri)
+    def start(self, redirect_uri: str, ask_again: bool = False) -> Response:
+        # "offline" gets us a refresh token, so the mirror can read the calendar when they're not
+        # signed in here. Google only sends it when it asks the person, which it does the first
+        # time, and again whenever prompt=consent.
+        extra = {"access_type": "offline", "include_granted_scopes": "true"}
+        if ask_again:
+            extra["prompt"] = "consent"
+        return self._client.authorize_redirect(redirect_uri, **extra)
 
-    def finish(self) -> dict[str, Any]:
-        """The signed-in account's ID token claims (`sub`, `given_name`, ...)."""
+    def finish(self) -> GoogleAccount:
         try:
-            claims = self._client.authorize_access_token().get("userinfo")
+            token = self._client.authorize_access_token()
         except OAuthError as error:
             raise SignInFailed(error.description or error.error) from None
+        claims = token.get("userinfo")
         if not claims or not claims.get("sub"):
             raise SignInFailed("Google didn't say who you are")
-        return claims
+        return GoogleAccount(
+            sub=claims["sub"],
+            name=_display_name(claims),
+            calendar=CALENDAR_SCOPE in (token.get("scope") or "").split(),
+            refresh_token=token.get("refresh_token"),
+        )
+
+    def revoke(self, refresh_token: str) -> None:
+        """Tells Google to forget the access it gave us. Best effort."""
+        try:
+            httpx.post("https://oauth2.googleapis.com/revoke", data={"token": refresh_token}, timeout=10)
+        except httpx.HTTPError as error:
+            logger.warning("Couldn't revoke a Google token: %r", error)
 
 
 class User(UserMixin):
@@ -85,7 +112,7 @@ def create_app(
     google: Optional[Google] = None,
     transport: Optional[httpx.BaseTransport] = None,
 ) -> Flask:
-    """`store`, `google` and `transport` let tests swap in a fake database, Google and services."""
+    """`store`, `google` and `transport` are for tests."""
     settings = settings or load_settings()
     app = Flask(__name__, static_folder="../static", template_folder="../templates")
     app.config.update(
@@ -98,6 +125,7 @@ def create_app(
     )
 
     db = store or PostgresStore(settings.database_url)
+    vault = Vault(settings.google_token_key)
     google = google or AuthlibGoogle(app, settings)
     client = httpx.Client(transport=transport, timeout=60)
     d3l = D3l(client, settings.d3l_url, settings.d3l_service_key)
@@ -119,12 +147,12 @@ def create_app(
     def me() -> Person:
         return current_user.person
 
-    # --- Safety checks on every request ---
+    # --- checks on every request ---
 
     @app.before_request
     def same_site_only():
-        # Every change is a fetch or form from our own pages, which always send our Origin. This
-        # stops other sites from making changes with someone's login cookie.
+        # every change comes from our own pages, which always send our Origin. this stops other
+        # sites making changes with someone's login cookie
         if request.method not in SAFE_METHODS and request.headers.get("Origin") != settings.origin:
             return jsonify(error="Requests must come from the app's own pages", code="bad_origin"), 403
 
@@ -160,14 +188,14 @@ def create_app(
     def server_error(_error):
         return render_template("error.html", message="Something went wrong on our end. Try again."), 500
 
-    # --- Pages ---
+    # --- pages ---
 
     @app.get("/")
     def home():
         if not current_user.is_authenticated:
             return render_template("index.html")
         person = me()
-        # The page still works if a service is down; it says it couldn't check.
+        # the page still loads if a service is down, it just says it couldn't check
         try:
             pictures: Optional[int] = len(faces.saved(person.id))
         except ServiceError as error:
@@ -179,6 +207,7 @@ def create_app(
             logger.warning("Settings page: %s: %s", error.code, error.message)
             brightspace = None
         return render_template("settings.html", person=person, pictures=pictures, brightspace=brightspace,
+                               calendar=db.calendar_token(person.id) is not None,
                                units=db.units(person.id), api_url=settings.d3l_public_url)
 
     @app.get("/faces")
@@ -186,24 +215,27 @@ def create_app(
     def face_pictures():
         return render_template("faceregistration.html")
 
-    # --- Signing in with Google ---
+    # --- Google sign-in ---
 
     @app.get("/login")
     def login():
-        return google.start(f"{settings.public_url}/login/callback")
+        # ?calendar=1 is the "Connect Google Calendar" button: make Google ask again
+        return google.start(f"{settings.public_url}/login/callback", ask_again=request.args.get("calendar") == "1")
 
     @app.get("/login/callback")
     def login_callback():
         try:
-            claims = google.finish()
+            account = google.finish()
         except SignInFailed as error:
             logger.info("Google sign-in failed: %s", error)
             return render_template("error.html", message="Signing in with Google didn't finish. Try again."), 400
-        person, is_new = db.sign_in(claims["sub"], _display_name(claims))
+        person, is_new = db.sign_in(account.sub, account.name)
+        if account.calendar and account.refresh_token:
+            db.save_calendar(person.id, vault.seal(person.id, account.refresh_token))
         login_user(User(person))
         if is_new:
             logger.info("New person %d signed up", person.id)
-        # New people start by taking their face pictures.
+        # new people start with their face pictures
         return redirect(url_for("face_pictures") if is_new else url_for("home"))
 
     @app.post("/logout")
@@ -211,7 +243,7 @@ def create_app(
         logout_user()
         return redirect(url_for("home"))
 
-    # --- What the pages call (JSON) ---
+    # --- JSON routes the pages call ---
 
     @app.put("/me/faces")
     @login_required
@@ -257,12 +289,26 @@ def create_app(
     def new_api_key():
         return jsonify(apiKey=db.new_api_key(me().id))
 
+    def forget_calendar(person_id: int) -> None:
+        sealed = db.calendar_token(person_id)
+        token = vault.unseal(person_id, sealed) if sealed else None
+        if token:
+            google.revoke(token)
+        db.forget_calendar(person_id)
+
+    @app.delete("/me/calendar")
+    @login_required
+    def disconnect_calendar():
+        forget_calendar(me().id)
+        return "", 204
+
     @app.delete("/me")
     @login_required
     def delete_account():
         person = me()
-        # d3l first, so it stops any sign-in and forgets the login it keeps in memory.
+        # d3l first, so it stops any sign-in and drops the login it holds in memory
         d3l.sign_out(person.id)
+        forget_calendar(person.id)
         db.delete_person(person.id)
         logout_user()
         logger.info("Person %d deleted their account", person.id)

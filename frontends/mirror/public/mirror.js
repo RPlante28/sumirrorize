@@ -1,24 +1,23 @@
-// The mirror display. Your face is the key: the page watches the webcam and sends frames to the
-// server, which says who it recognizes. It then asks them to blink (a photo can't), and once the
-// server has seen the blink it shows their widgets. When they leave, it clears. The camera's live
-// view, flipped like a mirror, is the background. Frames aren't kept.
+// The mirror display. The page watches the webcam and sends frames to the server, which says who
+// it recognizes. It asks them to blink (a photo can't), and once the server has seen the blink it
+// shows their widgets. When they leave it clears. The camera's view, flipped, is the background.
 
 const REFRESH_MS = 5 * 60_000;      // widget data refresh while someone stays
 const IDENTIFY_EVERY_MS = 500;
-// While waiting for a blink, frames go much faster so closed eyes aren't missed between two of
-// them. If no blink comes for a while (say, a photo propped up in front of the camera), ease off.
+// While waiting for a blink frames go much faster, so closed eyes aren't missed between two.
+// If no blink comes for a while (a photo propped up, say), ease off.
 const BLINK_EVERY_MS = 100;
 const BLINK_SLOW_EVERY_MS = 250;
 const BLINK_FAST_FOR_MS = 20_000;
-const BLINK_HINT_AFTER_MS = 6_000;   // no blink seen by then: say how to make one easy to see
+const BLINK_HINT_AFTER_MS = 6_000;  // no blink by then: suggest a slow one
 const FRAME_WIDTH = 640;            // frames are shrunk to this before sending
 
-const STABLE_MATCHES = 2;           // same person this many frames in a row before greeting them
-const SESSION_TIMEOUT_MS = 8_000;   // clear the mirror after this long without recognizing them
+const STABLE_MATCHES = 2;  // frames in a row before greeting someone
+const SESSION_TIMEOUT_MS = 8_000;  // clear the mirror after this long without them
 
 const $ = (id) => document.getElementById(id);
 
-// --- DOM helper: builds elements with text, never HTML, so Brightspace text can't inject markup ---
+// --- DOM helper. text only, never HTML, so Brightspace text can't inject markup ---
 
 function h(tag, className, ...children) {
   const el = document.createElement(tag);
@@ -30,7 +29,7 @@ function h(tag, className, ...children) {
   return el;
 }
 
-// Icons are fixed strings written here, so innerHTML is safe for them.
+// icons are fixed strings from this file, so innerHTML is fine
 function icon(name) {
   const span = document.createElement("span");
   span.innerHTML = ICONS[name] ?? ICONS.cloudy;
@@ -41,11 +40,9 @@ function icon(name) {
 
 class PassExpired extends Error {}
 
-/**
- * One camera frame in, who's there out: { faces, person, pass, blink }. `pass` is only there once
- * the server has seen them blink. Until then `blink` is their progress, to send with the next
- * frame. Sending the pass we hold keeps it fresh while the same person stays.
- */
+// One camera frame in, who's there out: { faces, person, pass, blink }. `pass` only comes once the
+// server has seen them blink. Until then `blink` is their progress, sent back with the next
+// frame. Sending the pass we hold keeps it fresh while they stay.
 async function identify(frame, { pass, blink }) {
   const headers = { "Content-Type": "image/jpeg" };
   if (pass) headers.Authorization = `Bearer ${pass}`;
@@ -153,15 +150,15 @@ const renderers = {
 
   weather(data) {
     const unit = data.units.temperature;
-    const deg = (t) => `${Math.round(t)}°`;
+    const deg = (t) => `${Math.round(t)}\u00b0`;
     const c = data.current;
     const alert = data.alerts?.[0];
     return [
-      alert ? h("div", "weather-alert", `⚠ ${alert.event}`) : null,
+      alert ? h("div", "weather-alert", `Alert: ${alert.event}`) : null,
       h("div", "weather-now", icon(weatherIcon(c.weatherCode, c.isDay)), h("div", "weather-temp", deg(c.temperature))),
-      h("div", "weather-desc", `${c.description} · feels ${deg(c.feelsLike)}${unit.slice(-1)}`),
+      h("div", "weather-desc", `${c.description}, feels ${deg(c.feelsLike)}${unit}`),
       h("div", "weather-detail",
-        `H ${deg(data.today.high)}  L ${deg(data.today.low)}  ·  ${c.windDirection} ${Math.round(c.windSpeed)} ${data.units.speed}`),
+        `H ${deg(data.today.high)}  L ${deg(data.today.low)}, ${c.windDirection} ${Math.round(c.windSpeed)} ${data.units.speed}`),
       h("div", "hourly", ...data.hourly.slice(1, 7).map((hour) => h("div", null,
         h("div", "hour-time", hourFmt.format(new Date(hour.time))),
         icon(weatherIcon(hour.weatherCode, hour.isDay)),
@@ -182,7 +179,7 @@ const renderers = {
         list.append(h("div", "day", day));
         lastDay = day;
       }
-      const details = [event.course, event.location].filter(Boolean).join(" · ");
+      const details = [event.course, event.location].filter(Boolean).join(", ");
       list.append(h("div", "row",
         h("div", "row-when", event.allDay ? "All day" : timeFmt.format(starts)),
         h("div", null,
@@ -203,7 +200,7 @@ const renderers = {
         : `Due ${dueText(due)}`;
       list.append(h("div", null,
         h("div", "ellipsis", work.name),
-        h("div", "meta ellipsis", when, work.course ? ` · ${work.course}` : null),
+        h("div", "meta ellipsis", when, work.course ? `, ${work.course}` : null),
       ));
     }
     return [h("div", "label", "Assignments"), list];
@@ -215,7 +212,7 @@ const renderers = {
     for (const item of data.announcements) {
       list.append(h("div", null,
         h("div", "ellipsis", item.title),
-        h("div", "meta ellipsis", [item.course, postedText(new Date(item.posted))].filter(Boolean).join(" · ")),
+        h("div", "meta ellipsis", [item.course, postedText(new Date(item.posted))].filter(Boolean).join(", ")),
         item.text ? h("div", "item-text", item.text) : null,
       ));
     }
@@ -224,9 +221,8 @@ const renderers = {
 };
 
 function renderWidget(widget) {
-  // The outer box is placed and sized; the inner one holds the content. Text sizes in cqh/cqw
-  // only measure against a parent box, which is why the content needs its own element.
-  // The saved position is handed to the stylesheet, which uses it on wide screens only.
+  // The outer box is placed and sized, the inner one holds the content (cqh/cqw text sizes only
+  // measure against a parent box). The saved position goes to the stylesheet as --x, --y, --w, --h.
   const box = h("div", "widget");
   box.dataset.key = widget.key;
   for (const side of ["x", "y", "w", "h"]) box.style.setProperty(`--${side}`, widget[side]);
@@ -247,12 +243,12 @@ function renderWidget(widget) {
 // --- Laying the widgets out ---
 
 // On a tall screen (a phone held upright) saved positions would squeeze every widget into a thin
-// strip. Instead the page arranges them itself: clock, weather, greeting and summary across the
-// top, your reflection in the middle, and the lists in a row along the bottom to swipe through.
+// strip, so the page arranges them itself: clock, weather, greeting and summary on top, the rest
+// as a row of cards along the bottom to swipe through.
 const tall = window.matchMedia("(max-aspect-ratio: 4/5)");
 const TALL_TOP = ["clock", "weather", "greeting", "summary"];
 
-let shown = null; // the mirror data on screen, kept so it can be laid out again if the screen turns
+let shown = null;  // the mirror data on screen, kept for when the screen turns
 
 function layOut(mirror) {
   shown = mirror;
@@ -265,7 +261,7 @@ function layOut(mirror) {
   if (tall.matches) {
     const top = TALL_TOP.map((key) => boxes.find((box) => box.dataset.key === key)).filter(Boolean);
     const cards = boxes.filter((box) => !top.includes(box));
-    // Clock and weather share a row; one without the other takes the whole row.
+    // clock and weather share a row, one without the other takes all of it
     const pair = top.filter((box) => box.dataset.key === "clock" || box.dataset.key === "weather");
     if (pair.length === 1) pair[0].classList.add("alone");
     const row = h("div", "tall-cards", ...cards);
@@ -280,7 +276,7 @@ function layOut(mirror) {
 
 // --- Fitting content to its box ---
 
-/** Shows only the list items that fit whole, and counts the rest in a "+N more" line. */
+// shows only the list items that fit whole and counts the rest in a "+N more" line
 function fitList(list) {
   list.querySelector(":scope > .more")?.remove();
   const children = [...list.children];
@@ -300,7 +296,7 @@ function fitList(list) {
     more.textContent = `+${hiddenItems} more`;
   };
   count();
-  // Make room for the "+N more" line itself, then drop any day heading left with nothing under it.
+  // make room for the "+N more" line, then drop any day heading left with nothing under it
   while (visible.length && overflows(more)) {
     visible.pop().hidden = true;
     count();
@@ -309,7 +305,7 @@ function fitList(list) {
   count();
 }
 
-/** Shrinks a text widget's font until all of its text fits. */
+// shrinks a text widget's font until it all fits
 function shrinkToFit(content) {
   content.style.removeProperty("font-size");
   let size = parseFloat(getComputedStyle(content).fontSize);
@@ -372,7 +368,7 @@ function idleClock() {
   tick();
 }
 
-/** What the waiting screen says: an optional big line (a greeting) and the small prompt under it. */
+// the waiting screen's words: an optional big line (a greeting) and the prompt under it
 function setPrompt(text, { hello = "", retry = false } = {}) {
   $("idle-hello").textContent = hello;
   $("idle-hello").hidden = !hello;
@@ -383,24 +379,24 @@ function setPrompt(text, { hello = "", retry = false } = {}) {
 // --- Who's at the mirror ---
 
 const session = {
-  person: null,       // { id, name } of whoever the mirror is open for
-  pass: null,         // proof from the server that it recognized them and saw them blink
-  waiting: null,      // someone recognized who hasn't blinked yet
+  person: null,  // { id, name } the mirror is open for
+  pass: null,  // from the server: it recognized them and saw them blink
+  waiting: null,  // recognized, but hasn't blinked yet
   waitingSince: 0,
-  streak: 0,          // frames in a row that `waiting` was recognized
-  blink: null,        // their progress towards a blink; goes back to the server with the next frame
+  streak: 0,  // frames in a row `waiting` was recognized
+  blink: null,  // blink progress, goes back with the next frame
   lastFace: 0,
   lastConfirmed: 0,
 };
 let refreshTimer = null;
 
-/** Applies one answer from the server. */
+// applies one answer from the server
 function update(result, now) {
   const recognized = result.person;
   if (result.faces > 0) session.lastFace = now;
   session.blink = result.blink ?? null;
 
-  // They've blinked, or the mirror is already open for them: (keep) showing their mirror.
+  // they've blinked, or the mirror is already open for them
   if (recognized && result.pass) {
     const arrived = session.person?.id !== recognized.id;
     Object.assign(session, { person: recognized, pass: result.pass, lastConfirmed: now, waiting: null, streak: 0 });
@@ -408,11 +404,11 @@ function update(result, now) {
     return;
   }
 
-  // Recognized, but the server hasn't seen them blink.
+  // recognized, but no blink yet
   if (recognized) {
     if (session.waiting?.id === recognized.id) session.streak += 1;
     else Object.assign(session, { waiting: recognized, waitingSince: now, streak: 1 });
-    // If the mirror is open, it's for someone else (or their pass ran out): close it for the newcomer.
+    // if the mirror is open it's for someone else (or their pass ran out), so close it
     if (session.streak >= STABLE_MATCHES && session.person) closeMirror();
     return;
   }
@@ -431,7 +427,7 @@ async function showPerson() {
   refreshTimer = setInterval(refresh, REFRESH_MS);
 }
 
-/** Takes whoever's mirror is open off the screen (and out of the page) and shows the waiting screen. */
+// takes the open mirror off the screen (and out of the page)
 function closeMirror() {
   Object.assign(session, { person: null, pass: null });
   clearInterval(refreshTimer);
@@ -447,10 +443,10 @@ function showNobody() {
   showWaitingPrompt();
 }
 
-/** The waiting screen's words: greets someone it recognizes and asks them to blink. */
+// greets someone it recognizes and asks them to blink
 function showWaitingPrompt() {
   if (session.waiting && session.streak >= STABLE_MATCHES) {
-    // A quick blink can fall between two frames. A slow one can't.
+    // a quick blink can fall between two frames, a slow one can't
     const slow = performance.now() - session.waitingSince > BLINK_HINT_AFTER_MS;
     setPrompt(slow ? "Close your eyes for a second, then open them" : "Blink to open your mirror",
       { hello: `Hi, ${session.waiting.name.split(" ")[0]}` });
@@ -468,7 +464,7 @@ async function refresh() {
     layOut(mirror);
     $("offline").hidden = true;
   } catch (error) {
-    // An expired pass gets replaced on the next recognition; anything else, keep the old data up.
+    // an expired pass gets replaced on the next recognition. anything else: keep the old data up
     if (!(error instanceof PassExpired)) $("offline").hidden = false;
   }
 }
@@ -504,20 +500,18 @@ function captureFrame() {
 
 let watching = false;
 
-/** Starts the recognition loop (once). */
 function startWatching() {
   if (watching) return;
   watching = true;
   watch();
 }
 
-/** How long to leave between frames right now. */
 function framePause(now) {
   if (!session.waiting) return IDENTIFY_EVERY_MS;
   return now - session.waitingSince < BLINK_FAST_FOR_MS ? BLINK_EVERY_MS : BLINK_SLOW_EVERY_MS;
 }
 
-/** Sends a frame, applies the answer, and schedules the next one. Only one request at a time. */
+// sends a frame, applies the answer, schedules the next. one request at a time
 async function watch() {
   const started = performance.now();
   let failed = false;
@@ -528,12 +522,12 @@ async function watch() {
       if (!session.person) showWaitingPrompt();
     } catch (error) {
       failed = true;
-      // Treat a failed check like an empty frame, so the mirror still clears when it should.
+      // treat a failed check like an empty frame so the mirror still clears when it should
       update({ faces: 0, person: null }, performance.now());
-      if (error.message !== "rate_limited" && !session.person) setPrompt("Can't reach the server…");
+      if (error.message !== "rate_limited" && !session.person) setPrompt("Can't reach the server...");
     }
   }
-  // Frames are timed from when the last one started, so a slow answer doesn't slow the pace further.
+  // timed from when the last frame started, so a slow answer doesn't slow the pace further
   const now = performance.now();
   setTimeout(watch, failed ? 2000 : Math.max(0, framePause(now) - (now - started)));
 }
@@ -548,11 +542,11 @@ async function start() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(fitAll, 150);
   });
-  // Turning the screen switches between the saved layout and the tall one.
+  // turning the screen switches between the saved layout and the tall one
   tall.addEventListener("change", () => {
     if (shown) layOut(shown);
   });
-  // Esc clears the mirror right away (it comes back if they're still there).
+  // Esc clears the mirror right away
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && session.person) showNobody();
   });

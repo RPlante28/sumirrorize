@@ -7,16 +7,17 @@ import json
 
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from flask import redirect
 
 from app.config import Settings
-from app.main import SignInFailed, create_app
+from app.main import GoogleAccount, SignInFailed, create_app
 from app.store import DEFAULT_UNITS, Person
 
 ORIGIN = "https://mirror.example"
 SETTINGS = Settings(
     public_url=ORIGIN, secret_key="s" * 32, database_url="unused",
-    google_client_id="id", google_client_secret="secret",
+    google_client_id="id", google_client_secret="secret", google_token_key=Fernet.generate_key().decode(),
     d3l_url="http://d3l", d3l_service_key="service-key", d3l_public_url=f"{ORIGIN}/api",
     faces_url="http://faces", faces_api_key="faces-key",
 )
@@ -35,7 +36,7 @@ class FakeStore:
             if p["sub"] == google_sub:
                 return Person(person_id, p["name"]), False
         person_id = len(self.people) + 1
-        self.people[person_id] = {"sub": google_sub, "name": name, "units": None, "key_hash": None}
+        self.people[person_id] = {"sub": google_sub, "name": name, "units": None, "key_hash": None, "calendar": None}
         return Person(person_id, name), True
 
     def units(self, person_id):
@@ -49,6 +50,15 @@ class FakeStore:
         self.people[person_id]["key_hash"] = hashlib.sha256(key.encode()).digest()
         return key
 
+    def calendar_token(self, person_id):
+        return self.people[person_id]["calendar"]
+
+    def save_calendar(self, person_id, sealed_token):
+        self.people[person_id]["calendar"] = sealed_token
+
+    def forget_calendar(self, person_id):
+        self.people[person_id]["calendar"] = None
+
     def delete_person(self, person_id):
         del self.people[person_id]
 
@@ -57,12 +67,17 @@ class FakeGoogle:
     """Signs in whoever `account` says, or fails when it's None."""
 
     def __init__(self):
-        self.account = {"sub": "google-alex", "given_name": "Alex"}
+        self.account = GoogleAccount("google-alex", "Alex", calendar=True, refresh_token="alex-calendar-token")
         self.redirect_uri = None
+        self.asked_again = False
+        self.revoked: list[str] = []
 
-    def start(self, redirect_uri):
-        self.redirect_uri = redirect_uri
+    def start(self, redirect_uri, ask_again=False):
+        self.redirect_uri, self.asked_again = redirect_uri, ask_again
         return redirect("https://accounts.google.com/o/oauth2/auth?fake")
+
+    def revoke(self, refresh_token):
+        self.revoked.append(refresh_token)
 
     def finish(self):
         if self.account is None:
@@ -277,6 +292,49 @@ def test_delete_account_waits_for_d3l(world):
     services.down.add("d3l")
     assert send(client, "DELETE", "/me").status_code == 503
     assert 1 in store.people
+
+
+def test_calendar_connects_at_sign_in(world):
+    client, store, google, _ = world
+    sign_in(client)
+    sealed = store.people[1]["calendar"]
+    assert sealed and b"alex-calendar-token" not in sealed       # saved, and not readable as is
+    assert "Connected. Your events" in client.get("/").get_data(as_text=True)
+
+    # Later sign-ins don't come with a token (Google only sends it when it asks). The saved one stays.
+    send(client, "POST", "/logout")
+    google.account = GoogleAccount("google-alex", "Alex", calendar=True, refresh_token=None)
+    sign_in(client)
+    assert store.people[1]["calendar"] == sealed
+
+
+def test_calendar_not_connected_if_they_say_no(world):
+    client, store, google, _ = world
+    google.account = GoogleAccount("google-alex", "Alex", calendar=False, refresh_token="unrelated")
+    sign_in(client)
+    assert store.people[1]["calendar"] is None
+    page = client.get("/").get_data(as_text=True)
+    assert "Connect Google Calendar" in page and "/login?calendar=1" in page
+
+    client.get("/login?calendar=1")
+    assert google.asked_again is True
+    client.get("/login")
+    assert google.asked_again is False
+
+
+def test_disconnect_calendar(world):
+    client, store, google, _ = world
+    sign_in(client)
+    assert send(client, "DELETE", "/me/calendar").status_code == 204
+    assert store.people[1]["calendar"] is None
+    assert google.revoked == ["alex-calendar-token"]             # Google is told too
+
+
+def test_deleting_account_drops_calendar_access(world):
+    client, store, google, _ = world
+    sign_in(client)
+    assert send(client, "DELETE", "/me").status_code == 204
+    assert google.revoked == ["alex-calendar-token"] and store.people == {}
 
 
 def test_security_headers(world):

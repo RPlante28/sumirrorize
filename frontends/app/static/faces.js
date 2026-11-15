@@ -1,5 +1,5 @@
-// Takes one picture per angle, then sends them all to be checked and saved. If some aren't good
-// enough, it goes back to just those, says why, and sends again.
+// One picture per angle, then all of them are sent to be checked and saved. If some aren't good
+// enough it goes back to just those and says why.
 import { api, hide, show } from "./api.js";
 
 const $ = (id) => document.getElementById(id);
@@ -12,7 +12,7 @@ const STEPS = [
   { angle: "down", title: "DOWN ANGLE", instruction: "Tilt your head slightly down." },
 ];
 
-// What the faces service says is wrong with a picture, in words.
+// what the faces service says is wrong with a picture, in words
 const PROBLEMS = {
   no_face: "We couldn't find your face. Make sure your whole face is in the circle.",
   several_faces: "There's more than one face in the picture. Make sure only you are in view.",
@@ -21,7 +21,7 @@ const PROBLEMS = {
   different_person: "This doesn't look like the same person as your other pictures. Make sure it's only you.",
 };
 
-const MAX_SIDE = 1280; // plenty for recognition, and keeps uploads small
+const MAX_SIDE = 1280;  // plenty for recognition, keeps uploads small
 const JPEG_QUALITY = 0.9;
 
 const video = $("video");
@@ -32,10 +32,10 @@ const retryBtn = $("retry");
 const photos = new Array(STEPS.length).fill(null); // data URLs
 const problems = new Array(STEPS.length).fill(null); // problem codes from the last upload
 let current = 0;
-let reviewing = false; // showing the photo just taken, waiting for Next or Retake
+let reviewing = false;  // showing the photo just taken
 let saving = false;
 
-/** The first step still needing a (good) photo, or -1 when every photo is ready to send. */
+// first step still needing a good photo, or -1 when they're all ready to send
 function nextStep() {
   return STEPS.findIndex((_, i) => !photos[i] || problems[i]);
 }
@@ -51,7 +51,7 @@ function render() {
   canvas.hidden = !reviewing;
   retryBtn.hidden = !reviewing || saving;
   $("success").hidden = !reviewing || saving;
-  if (saving) captureBtn.textContent = "Saving…";
+  if (saving) captureBtn.textContent = "Saving...";
   else if (!reviewing) captureBtn.textContent = "Capture Photo";
   else captureBtn.textContent = nextAfter(current) === -1 ? "Complete Registration" : "Next Angle";
   captureBtn.disabled = saving || !video.videoWidth;
@@ -61,13 +61,14 @@ function render() {
       const item = document.createElement("p");
       const done = photos[i] && !problems[i];
       item.className = done ? "done" : problems[i] ? "problem" : "";
-      item.textContent = `${done ? "✓" : problems[i] ? "✕" : "○"} ${s.title.toLowerCase().replace(/^\w/, (c) => c.toUpperCase())}`;
+      const name = s.title.toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+      item.textContent = done ? `${name}: done` : problems[i] ? `${name}: retake` : name;
       return item;
     })
   );
 }
 
-/** The step to go to after this one, assuming this one's photo is now good. */
+// the step to go to after this one
 function nextAfter(index) {
   return STEPS.findIndex((_, i) => i !== index && (!photos[i] || problems[i]));
 }
@@ -76,7 +77,7 @@ function capture() {
   const scale = Math.min(1, MAX_SIDE / Math.max(video.videoWidth, video.videoHeight));
   canvas.width = Math.round(video.videoWidth * scale);
   canvas.height = Math.round(video.videoHeight * scale);
-  // The picture is saved as the camera sees it (not mirrored), the same way the mirror sees you.
+  // saved as the camera sees it (not mirrored), same as the mirror sees you
   canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
   photos[current] = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
   problems[current] = null;
@@ -127,7 +128,7 @@ async function save() {
       current = nextStep();
       showProblem();
     } else {
-      // Nothing was wrong with the pictures (e.g. offline): stay on the last one so they can send again.
+      // nothing wrong with the pictures (e.g. offline), stay here so they can send again
       reviewing = true;
       show($("error"), error.message);
     }

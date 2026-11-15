@@ -1,4 +1,4 @@
-"""People and their settings in the database. Face pictures go through the faces service instead."""
+# people and their settings. face pictures go through the faces service instead
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Optional, Protocol
 from psycopg_pool import ConnectionPool
 
 UNITS = ("imperial", "metric")
-DEFAULT_UNITS = "imperial"  # what the mirror uses when the weather widget has no setting
+DEFAULT_UNITS = "imperial"  # used when the weather widget has no setting
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class Person:
 
 
 def make_api_key() -> tuple[str, bytes]:
-    """A new API key and the SHA-256 hash that's stored. The key itself is never stored."""
+    """A new API key and its SHA-256 hash. Only the hash is stored."""
     key = secrets.token_urlsafe(32)
     return key, hashlib.sha256(key.encode()).digest()
 
@@ -31,6 +31,9 @@ class Store(Protocol):
     def units(self, person_id: int) -> str: ...
     def set_units(self, person_id: int, units: str) -> None: ...
     def new_api_key(self, person_id: int) -> str: ...
+    def calendar_token(self, person_id: int) -> Optional[bytes]: ...
+    def save_calendar(self, person_id: int, sealed_token: bytes) -> None: ...
+    def forget_calendar(self, person_id: int) -> None: ...
     def delete_person(self, person_id: int) -> None: ...
 
 
@@ -54,7 +57,7 @@ class PostgresStore:
             row = db.execute(find, (google_sub,)).fetchone()
             if row:
                 return Person(*row), False
-            # Every person needs a key hash. Nobody sees this key; they can ask for one later.
+            # everyone needs a key hash. nobody sees this key, they can ask for one later
             _, key_hash = make_api_key()
             row = db.execute(
                 """INSERT INTO person (display_name, api_key_hash, google_sub) VALUES (%s, %s, %s)
@@ -63,7 +66,7 @@ class PostgresStore:
             ).fetchone()
             if row:
                 return Person(*row), True
-            # Signed in twice at the same moment and the other request made them first.
+            # signed in twice at once and the other request made them first
             return Person(*db.execute(find, (google_sub,)).fetchone()), False
 
     def units(self, person_id: int) -> str:
@@ -89,7 +92,26 @@ class PostgresStore:
             db.execute("UPDATE person SET api_key_hash = %s WHERE person_id = %s", (key_hash, person_id))
         return key
 
+    def calendar_token(self, person_id: int) -> Optional[bytes]:
+        """Their Google Calendar token, still encrypted. None if it isn't connected."""
+        with self._pool.connection() as db:
+            row = db.execute("SELECT refresh_token FROM google_calendar WHERE person_id = %s", (person_id,)).fetchone()
+        return bytes(row[0]) if row else None
+
+    def save_calendar(self, person_id: int, sealed_token: bytes) -> None:
+        with self._pool.connection() as db:
+            db.execute(
+                """INSERT INTO google_calendar (person_id, refresh_token) VALUES (%s, %s)
+                   ON CONFLICT (person_id) DO UPDATE
+                   SET refresh_token = EXCLUDED.refresh_token, connected_at = now()""",
+                (person_id, sealed_token),
+            )
+
+    def forget_calendar(self, person_id: int) -> None:
+        with self._pool.connection() as db:
+            db.execute("DELETE FROM google_calendar WHERE person_id = %s", (person_id,))
+
     def delete_person(self, person_id: int) -> None:
-        """Also deletes their face pictures, widgets and Brightspace login (ON DELETE CASCADE)."""
+        """Their pictures, widgets and Brightspace login go too (ON DELETE CASCADE)."""
         with self._pool.connection() as db:
             db.execute("DELETE FROM person WHERE person_id = %s", (person_id,))
