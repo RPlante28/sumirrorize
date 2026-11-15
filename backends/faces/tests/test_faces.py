@@ -28,7 +28,10 @@ ALEX, RILEY = direction(1), direction(2)
 
 
 class FakeEngine:
-    """Reads the 'picture' as a script: b"face:alex", b"faces:2", b"dark", b"small", b"none", b"broken"."""
+    """
+    Reads the 'picture' as a script: b"face:alex", b"faces:2", b"dark", b"small", b"none", b"broken".
+    b"face:alex~0.3" adds noise to the fingerprint, and b"face:alex!shut" closes their eyes.
+    """
 
     def analyze(self, image: bytes) -> Analysis:
         text = image.decode(errors="replace")
@@ -37,17 +40,18 @@ class FakeEngine:
         if text == "none":
             return Analysis([])
         if text == "faces:2":
-            return Analysis([Face(150, 120, ALEX), Face(140, 120, RILEY)])
+            return Analysis([Face(150, 120, ALEX, 1.0), Face(140, 120, RILEY, 1.0)])
         if text == "dark":
-            return Analysis([Face(150, 10, ALEX)])
+            return Analysis([Face(150, 10, ALEX, 1.0)])
         if text == "small":
-            return Analysis([Face(50, 120, ALEX)])
+            return Analysis([Face(50, 120, ALEX, 1.0)])
         if text == "far":                       # big enough to sign up with? no. At the mirror? no.
-            return Analysis([Face(40, 120, ALEX)])
-        name, _, noise = text.removeprefix("face:").partition("~")
+            return Analysis([Face(40, 120, ALEX, 1.0)])
+        text, _, eyes = text.removeprefix("face:").partition("!")
+        name, _, noise = text.partition("~")
         base = {"alex": ALEX, "riley": RILEY}[name]
         fingerprint = base + (direction(99) * float(noise) if noise else 0)
-        return Analysis([Face(150, 120, fingerprint.astype(np.float32))])
+        return Analysis([Face(150, 120, fingerprint.astype(np.float32), 0.02 if eyes == "shut" else 0.98)])
 
 
 class FakeStore:
@@ -120,9 +124,17 @@ def test_enroll_then_recognize(client, store):
     assert body["faces"] == 1 and body["match"]["personId"] == 3 and body["match"]["similarity"] > 0.8
 
 
+def test_says_how_open_the_eyes_are(client):
+    enroll(client, 3, front="face:alex")
+    assert identify(client, "face:alex").json()["eyesOpen"] == 0.98
+    assert identify(client, "face:alex!shut").json()["eyesOpen"] == 0.02
+    assert identify(client, "face:riley").json()["eyesOpen"] == 0.98   # measured even for strangers
+    assert identify(client, "none").json()["eyesOpen"] is None
+
+
 def test_stranger_not_recognized(client):
     enroll(client, 3, front="face:alex")
-    assert identify(client, "face:riley").json() == {"faces": 1, "match": None}
+    assert identify(client, "face:riley").json() == {"faces": 1, "match": None, "eyesOpen": 0.98}
 
 
 def test_tells_two_people_apart(client):
@@ -134,18 +146,18 @@ def test_tells_two_people_apart(client):
 
 def test_nobody_there(client):
     enroll(client, 3, front="face:alex")
-    assert identify(client, "none").json() == {"faces": 0, "match": None}
+    assert identify(client, "none").json() == {"faces": 0, "match": None, "eyesOpen": None}
 
 
 def test_far_away_face_ignored(client):
     enroll(client, 3, front="face:alex")
-    assert identify(client, "far").json() == {"faces": 1, "match": None}
+    assert identify(client, "far").json() == {"faces": 1, "match": None, "eyesOpen": None}
 
 
 def test_largest_face_wins(client):
     enroll(client, 4, front="face:riley")
     # Two faces: the bigger (closer) one is Alex, who isn't signed up, so no match even though Riley is there.
-    assert identify(client, "faces:2").json() == {"faces": 2, "match": None}
+    assert identify(client, "faces:2").json()["match"] is None
 
 
 def test_poor_pictures_rejected_and_nothing_saved(client, store):
@@ -156,6 +168,17 @@ def test_poor_pictures_rejected_and_nothing_saved(client, store):
     assert body["code"] == "poor_pictures"
     assert [p["problem"] for p in body["pictures"]] == [None, "no_face", "bad_lighting", "too_small", "several_faces"]
     assert len(store.pictures[3]) == 1  # the old set is untouched
+
+
+def test_pictures_must_all_be_the_same_person(client, store):
+    response = enroll(client, 3, front="face:alex", left="face:alex~0.3", right="face:riley", up="face:alex~0.4")
+    assert response.status_code == 422
+    assert [p["problem"] for p in response.json()["pictures"]] == [None, None, "different_person", None]
+    assert 3 not in store.pictures
+
+    # Checked together with the other problems, so everything to retake is listed at once.
+    response = enroll(client, 3, front="face:alex", left="dark", right="face:riley", up="face:alex~0.3")
+    assert [p["problem"] for p in response.json()["pictures"]] == [None, "bad_lighting", "different_person", None]
 
 
 def test_new_upload_replaces_old_set(client, store):

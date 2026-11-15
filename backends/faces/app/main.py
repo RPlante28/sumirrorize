@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .config import Settings, load_settings
-from .engine import BadImage, Engine, OpenCvEngine, enrollment_problem, mirror_face
+from .engine import BadImage, Engine, OpenCvEngine, enrollment_problem, mirror_face, other_people
 from .store import NewPicture, PostgresStore, Store
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -111,6 +111,8 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
         return {
             "faces": len(analysis.faces),
             "match": {"personId": match.person_id, "similarity": round(match.similarity, 3)} if recognized else None,
+            # How open the eyes of the face at the mirror are (0-1): the mirror watches this for a blink.
+            "eyesOpen": round(face.eyes_open, 3) if face is not None else None,
         }
 
     @app.get("/people/{person_id}/faces", dependencies=[Depends(require_key)])
@@ -125,8 +127,9 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
     @app.put("/people/{person_id}/faces", dependencies=[Depends(require_key)])
     async def enroll(person_id: int, body: Enrollment, request: Request):
         """
-        Replaces a person's face pictures. Every picture must show exactly one clear face; if any
-        doesn't, nothing is saved and `pictures` says which to retake and why.
+        Replaces a person's face pictures. Every picture must show exactly one clear face, and
+        they must all be the same person; otherwise nothing is saved and `pictures` says which to
+        retake and why.
         """
         if not body.pictures or len(body.pictures) > MAX_PICTURES:
             raise ApiError(400, f"Send between 1 and {MAX_PICTURES} pictures", "bad_request")
@@ -144,7 +147,12 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
             if problem is None:
                 new.append(NewPicture(picture.angle, data, mime, analysis.faces[0].fingerprint))
 
-        if len(new) < len(body.pictures):
+        # Among the pictures that are fine on their own, any that show somebody else.
+        good = [result for result in results if result["problem"] is None]
+        for index in other_people([p.fingerprint for p in new], settings.match_threshold):
+            good[index]["problem"] = "different_person"
+
+        if any(result["problem"] for result in results):
             raise ApiError(422, "Some pictures need retaking", "poor_pictures", pictures=results)
         await request.app.state.store.replace_pictures(person_id, new)
         logger.info("Saved %d face pictures for person %d", len(new), person_id)

@@ -10,9 +10,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.blink import MAX_CLOSED, STEP_TIMEOUT, BlinkCheck
 from app.config import Settings
-from app.main import create_app
-from app.passes import Passes
+from app.main import IDENTIFY_BURST, create_app
+from app.passes import Passes, Signer
 from app.sources import Assignment, Event, course_name
 from app.store import Person, WidgetPlacement
 from app.widgets import summarize
@@ -67,9 +68,13 @@ class FakeBackends:
         self.signed_in = True
         self.weather_up = True
         self.faces_up = True
+        self.odd_calendar = False
 
     def faces(self, request: httpx.Request) -> httpx.Response:
-        """The 'frame' is a script: b"face:3" (person 3), b"stranger", b"nobody", b"broken"."""
+        """
+        The 'frame' is a script: b"face:3" (person 3), b"stranger", b"nobody", b"broken".
+        b"face:3!shut" is person 3 with their eyes closed, and b"face:3!half" half open.
+        """
         self.face_requests.append(request)
         assert request.headers["authorization"] == "Bearer faces-key"
         if not self.faces_up:
@@ -78,8 +83,11 @@ class FakeBackends:
         if frame == "broken":
             return httpx.Response(400, json={"error": "Not a readable image", "code": "bad_image"})
         if frame.startswith("face:"):
-            return httpx.Response(200, json={"faces": 1, "match": {"personId": int(frame[5:]), "similarity": 0.9}})
-        return httpx.Response(200, json={"faces": 0 if frame == "nobody" else 1, "match": None})
+            person, _, eyes = frame[5:].partition("!")
+            return httpx.Response(200, json={"faces": 1, "match": {"personId": int(person), "similarity": 0.9},
+                                             "eyesOpen": {"": 0.98, "shut": 0.02, "half": 0.5}[eyes]})
+        nobody = frame == "nobody"
+        return httpx.Response(200, json={"faces": 0 if nobody else 1, "match": None, "eyesOpen": None if nobody else 0.98})
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         if request.url.host == "faces":
@@ -130,6 +138,8 @@ class FakeBackends:
             return httpx.Response(200, json=[{"OrgUnitId": 99, "ItemName": "Late lab", "DueDate": iso(NOW - timedelta(days=2))}])
         if path == "/calendar":
             assert request.url.params["startDateTime"].endswith(".000Z")
+            if self.odd_calendar:
+                return httpx.Response(200, json=[{"Name": "An event in a shape we've never seen"}])
             return httpx.Response(200, json=[
                 {"Title": "Finished", "OrgUnitName": "Algorithms", "StartDateTime": iso(NOW - timedelta(hours=3)),
                  "EndDateTime": iso(NOW - timedelta(hours=2)), "IsAllDayEvent": False, "LocationName": ""},
@@ -149,14 +159,32 @@ def client_for(backends: FakeBackends, widgets: list[WidgetPlacement]) -> TestCl
     return TestClient(app)
 
 
-def identify(client: TestClient, frame: str, content_type: str = "image/jpeg"):
-    return client.post("/api/identify", content=frame.encode(), headers={"Content-Type": content_type})
+def identify(client: TestClient, frame: str, content_type: str = "image/jpeg", blink: Optional[str] = None,
+             held_pass: Optional[str] = None):
+    headers = {"Content-Type": content_type}
+    if blink:
+        headers["X-Blink"] = blink
+    if held_pass:
+        headers["Authorization"] = f"Bearer {held_pass}"
+    return client.post("/api/identify", content=frame.encode(), headers=headers)
 
 
-def load_mirror(client: TestClient, frame: str = "face:3") -> dict:
-    """What the mirror page does: recognize a face, then load that person's mirror with the pass."""
-    token = identify(client, frame).json()["pass"]
-    return client.get("/api/mirror", headers={"Authorization": f"Bearer {token}"}).json()
+def watch(client: TestClient, *frames: str) -> dict:
+    """Sends frames one after another like the mirror page, passing the blink progress along."""
+    body: dict = {}
+    for frame in frames:
+        body = identify(client, frame, blink=body.get("blink")).json()
+    return body
+
+
+def blink_in(client: TestClient, person: int = 3) -> str:
+    """Person looks at the mirror and blinks. Returns their pass."""
+    return watch(client, f"face:{person}", f"face:{person}!shut", f"face:{person}")["pass"]
+
+
+def load_mirror(client: TestClient) -> dict:
+    """What the mirror page does: recognize a face, see a blink, then load the mirror with the pass."""
+    return client.get("/api/mirror", headers={"Authorization": f"Bearer {blink_in(client)}"}).json()
 
 
 ALL = [placement(k) for k in ("clock", "greeting", "weather", "calendar", "assignments", "announcements", "summary")]
@@ -166,26 +194,86 @@ def widget(body: dict, key: str) -> dict:
     return next(w for w in body["widgets"] if w["key"] == key)
 
 
-def test_recognized_face_gets_a_pass(backends):
+def test_recognized_face_gets_a_pass_after_blinking(backends):
     with client_for(backends, ALL) as client:
-        body = identify(client, "face:3").json()
-    assert body["faces"] == 1 and body["person"] == {"id": 3, "name": "Alex Smith"}
-    assert body["pass"] and body["expiresAt"]
+        seen = identify(client, "face:3").json()
+        assert seen["faces"] == 1 and seen["person"] == {"id": 3, "name": "Alex Smith"}
+        assert seen["pass"] is None and seen["blink"]          # recognized, but not let in yet
+        shut = identify(client, "face:3!shut", blink=seen["blink"]).json()
+        assert shut["pass"] is None and shut["blink"]
+        opened = identify(client, "face:3", blink=shut["blink"]).json()
+        assert opened["pass"] and opened["expiresAt"] and opened["blink"] is None
     assert backends.face_requests[0].headers["content-type"] == "image/jpeg"
 
 
-def test_no_pass_for_strangers_or_empty_rooms(backends):
+def test_a_photo_never_gets_a_pass(backends):
     with client_for(backends, ALL) as client:
-        assert identify(client, "stranger").json() == {"faces": 1, "person": None, "pass": None, "expiresAt": None}
-        assert identify(client, "nobody").json() == {"faces": 0, "person": None, "pass": None, "expiresAt": None}
+        # Eyes that stay open, stay half open, or stay shut aren't a blink.
+        assert watch(client, *["face:3"] * 6)["pass"] is None
+        assert watch(client, "face:3", "face:3!half", "face:3")["pass"] is None
+        assert watch(client, *["face:3!shut"] * 4, "face:3")["pass"] is None
+        # Without the progress from the frame before, every frame is a first frame.
+        for frame in ("face:3", "face:3!shut", "face:3"):
+            assert identify(client, frame).json()["pass"] is None
+
+
+def test_blink_must_be_the_same_person_throughout(backends):
+    with client_for(backends, ALL) as client:
+        # A photo of Alex, then someone else's closed eyes, then the photo again.
+        assert watch(client, "face:3", "face:4!shut", "face:3")["pass"] is None
+        assert watch(client, "face:3", "stranger", "face:3")["pass"] is None
+        # Riley's blink doesn't open Alex's mirror.
+        progress = watch(client, "face:4", "face:4!shut")["blink"]
+        assert identify(client, "face:3", blink=progress).json()["pass"] is None
+
+
+def test_blink_steps_and_timing():
+    check = BlinkCheck(Signer(b"s" * 32), open_at=0.7, closed_at=0.35)
+    _, seen_open = check.step(None, 3, 0.98, now=100)
+    _, seen_shut = check.step(seen_open, 3, 0.02, now=100.2)
+
+    assert check.step(seen_shut, 3, 0.98, now=100.4) == (True, None)
+    # Half-open frames in the middle of a blink don't spoil it.
+    _, closing = check.step(seen_open, 3, 0.5, now=100.1)
+    _, shut = check.step(closing, 3, 0.1, now=100.2)
+    _, opening = check.step(shut, 3, 0.5, now=100.3)
+    assert check.step(opening, 3, 0.9, now=100.4)[0] is True
+
+    # Too slow between frames, or eyes shut for too long: start over.
+    assert check.step(seen_open, 3, 0.02, now=100 + STEP_TIMEOUT + 1) == (False, None)
+    _, still_shut = check.step(seen_shut, 3, 0.02, now=101.5)
+    assert check.step(still_shut, 3, 0.98, now=100.2 + MAX_CLOSED + 0.5)[0] is False
+    # Forged, someone else's, or signed by a different server.
+    assert check.step(seen_shut[:-2] + "AA", 3, 0.98, now=100.4)[0] is False
+    assert check.step(seen_shut, 4, 0.98, now=100.4)[0] is False
+    assert BlinkCheck(Signer(b"x" * 32), 0.7, 0.35).step(seen_shut, 3, 0.98, now=100.4)[0] is False
+    # Eyes that can't be read change nothing.
+    assert check.step(seen_shut, 3, None, now=100.3)[0] is False
+
+
+def test_pass_renews_while_they_stay(backends):
+    with client_for(backends, ALL) as client:
+        first = blink_in(client)
+        again = identify(client, "face:3", held_pass=first).json()
+        assert again["pass"] and again["blink"] is None        # no second blink needed
+        # Someone else's pass doesn't let this person in.
+        other = identify(client, "face:4", held_pass=first).json()
+        assert other["person"]["id"] == 4 and other["pass"] is None
+
+
+def test_no_pass_for_strangers_or_empty_rooms(backends):
+    nothing = {"person": None, "pass": None, "expiresAt": None, "blink": None}
+    with client_for(backends, ALL) as client:
+        assert identify(client, "stranger").json() == {"faces": 1, **nothing}
+        assert identify(client, "nobody").json() == {"faces": 0, **nothing}
         # Recognized, but that person has since been deleted.
-        assert identify(client, "face:99").json()["pass"] is None
+        assert watch(client, "face:99", "face:99!shut", "face:99") == {"faces": 1, **nothing}
 
 
 def test_mirror_needs_a_valid_pass(backends):
     with client_for(backends, ALL) as client:
         assert client.get("/api/mirror").json()["code"] == "pass_expired"
-        token = identify(client, "face:3").json()["pass"]
+        token = blink_in(client)
         forged = token[:-2] + ("AA" if not token.endswith("AA") else "BB")
         assert client.get("/api/mirror", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
         # The old ways in are gone.
@@ -194,15 +282,19 @@ def test_mirror_needs_a_valid_pass(backends):
 
 
 def test_passes_expire_and_cant_be_moved():
-    passes = Passes(lifetime_seconds=60, secret=b"s" * 32)
+    signer = Signer(b"s" * 32)
+    passes = Passes(signer, lifetime_seconds=60)
     token, _ = passes.issue(3)
     assert passes.check(token) == 3
-    assert Passes(lifetime_seconds=-1, secret=b"s" * 32).check(Passes(-1, b"s" * 32).issue(3)[0]) is None
-    assert Passes(60, secret=b"other" * 8).check(token) is None   # signed by a different server
+    assert Passes(signer, lifetime_seconds=-1).check(Passes(signer, -1).issue(3)[0]) is None
+    assert Passes(Signer(b"other" * 8), 60).check(token) is None  # signed by a different server
     body, signature = token.split(".")
-    other_body = Passes(60, b"x" * 32).issue(4)[0].split(".")[0]
+    other_body = Passes(Signer(b"x" * 32), 60).issue(4)[0].split(".")[0]
     assert passes.check(f"{other_body}.{signature}") is None      # someone else's ID with this signature
-    assert passes.check("garbage") is None
+    assert passes.check("garbage") is None and passes.check(None) is None
+    # Blink progress is signed by the same server, but it isn't a pass.
+    _, progress = BlinkCheck(signer, 0.7, 0.35).step(None, 3, 0.98, now=100)
+    assert passes.check(progress) is None
 
 
 def test_bad_frames(backends):
@@ -217,8 +309,8 @@ def test_bad_frames(backends):
 
 def test_rate_limited(backends):
     with client_for(backends, ALL) as client:
-        codes = [identify(client, "nobody").status_code for _ in range(12)]
-    assert codes[:8] == [200] * 8 and 429 in codes[8:]
+        codes = [identify(client, "nobody").status_code for _ in range(IDENTIFY_BURST + 10)]
+    assert codes[:IDENTIFY_BURST] == [200] * IDENTIFY_BURST and 429 in codes[IDENTIFY_BURST:]
 
 
 def test_full_mirror(backends):
@@ -286,6 +378,16 @@ def test_weather_down_only_affects_weather(backends):
         body = load_mirror(client)
     assert widget(body, "weather")["error"]["code"] == "weather_unavailable"
     assert widget(body, "calendar")["error"] is None
+
+
+def test_odd_data_only_affects_its_own_widgets(backends):
+    backends.odd_calendar = True
+    with client_for(backends, ALL) as client:
+        body = load_mirror(client)
+    assert widget(body, "calendar")["data"] is None and widget(body, "calendar")["error"]["code"] == "unavailable"
+    assert len(widget(body, "assignments")["data"]["assignments"]) == 3
+    assert widget(body, "weather")["error"] is None
+    assert "calendar" not in widget(body, "summary")["data"]["text"]   # the summary skips what it couldn't get
 
 
 def test_summary_wording():

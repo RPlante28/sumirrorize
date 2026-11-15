@@ -145,7 +145,11 @@ class RemoteLogin {
         break;
       case "key": {
         const combo = keyCombo(message);
-        if (combo) await page.keyboard.press(combo);
+        if (!combo) break;
+        // A lone character is typed: a real key press where the keyboard has that key, plain
+        // text where it doesn't (e.g. "é"). Anything else is a named key or a shortcut.
+        if (combo === message.key && combo.length === 1) await page.keyboard.type(combo);
+        else await page.keyboard.press(combo);
         break;
       }
       case "text":

@@ -1,7 +1,7 @@
 import type { Cookie } from "playwright";
 import { signInSilently } from "./browser.js";
 import { D2L_HOST } from "./config.js";
-import { signInRequired } from "./errors.js";
+import { brightspaceUnavailable, signInRequired } from "./errors.js";
 import { forgetSession, loadCookies, peopleWithSessions, updateCookies } from "./sessions.js";
 
 const BASE_URL = `https://${D2L_HOST}`;
@@ -10,6 +10,8 @@ const REFRESH_MARGIN = 5 * 60_000;
 // /d2l/home), so touching it well inside that keeps the session alive indefinitely.
 const KEEP_ALIVE_INTERVAL = 30 * 60_000;
 const XSRF_TOKEN = /localStorage\.setItem\('XSRF\.Token','([^']+)'\)/;
+// Where Brightspace sends a browser whose session has ended.
+const LOGIN_PATH = "/d2l/login";
 
 type Token = { token: string; expiresAt: number };
 
@@ -25,33 +27,64 @@ function cookieHeader(cookies: Cookie[]): string {
     .join("; ");
 }
 
+async function ask(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${BASE_URL}${path}`, init);
+  } catch (error) {
+    throw brightspaceUnavailable(`couldn't reach it: ${(error as Error).message}`);
+  }
+}
+
+/**
+ * True if Brightspace answered by sending the browser to its login page, which is how it says a
+ * session has ended: a small page whose script goes there (status 200), or a plain redirect.
+ */
+async function sentToLogin(response: Response): Promise<boolean> {
+  if (response.headers.get("location")?.includes(LOGIN_PATH)) return true;
+  return response.ok && (await response.text()).includes(LOGIN_PATH);
+}
+
 /**
  * Gets an API token the way the Brightspace web app does: session cookie plus the XSRF
- * token embedded in /d2l/home. No browser needed. Returns null if the session has ended;
- * throws if Brightspace couldn't be reached (which says nothing about the session).
+ * token embedded in /d2l/home. No browser needed.
+ *
+ * Returns null only when Brightspace says the session has ended. If Brightspace can't be reached
+ * or answers with anything else (an error or maintenance page), that says nothing about the
+ * session, so this throws and the saved login is kept.
  */
 export async function mintToken(cookies: Cookie[]): Promise<Token | null> {
   const cookie = cookieHeader(cookies);
   if (!cookie) return null;
 
-  // An ended session redirects to the login page instead of returning 200.
-  const home = await fetch(`${BASE_URL}/d2l/home`, { headers: { cookie }, redirect: "manual" });
-  const xsrf = home.ok ? (await home.text()).match(XSRF_TOKEN)?.[1] : undefined;
-  if (!xsrf) return null;
+  const home = await ask("/d2l/home", { headers: { cookie }, redirect: "manual" });
+  const page = home.ok ? await home.clone().text() : "";
+  const xsrf = page.match(XSRF_TOKEN)?.[1];
+  if (!xsrf) {
+    if (await sentToLogin(home)) return null;
+    throw brightspaceUnavailable(`its home page answered ${home.status} without a session`);
+  }
 
-  const response = await fetch(`${BASE_URL}/d2l/lp/auth/oauth2/token`, {
+  const response = await ask("/d2l/lp/auth/oauth2/token", {
     method: "POST",
     redirect: "manual",
     headers: { cookie, "content-type": "application/x-www-form-urlencoded", "x-csrf-token": xsrf },
     body: "scope=*:*:*",
   });
-  // A rejected request comes back as a 200 HTML redirect page, not an error status.
-  if (!response.ok || !response.headers.get("content-type")?.includes("json")) return null;
+  if (!response.ok || !response.headers.get("content-type")?.includes("json")) {
+    // A rejected request comes back as the same go-to-login page, not an error status.
+    if (await sentToLogin(response)) return null;
+    throw brightspaceUnavailable(`its token request answered ${response.status}`);
+  }
 
   const { access_token, expires_at } = (await response.json()) as { access_token: string; expires_at: number };
   return { token: access_token, expiresAt: expires_at * 1000 };
 }
 
+/**
+ * A fresh token for the person. Their saved login is deleted only when Brightspace says the
+ * session has ended and renewing it in the background didn't work either. If Brightspace or the
+ * school's login site is down, mintToken or signInSilently throws and the login is kept.
+ */
 async function renewNow(personId: number): Promise<string> {
   const cookies = await loadCookies(personId);
   if (cookies.length === 0) throw signInRequired();

@@ -6,6 +6,7 @@ request, only if a widget needs it, and a failing source only affects its own wi
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Optional
@@ -13,6 +14,8 @@ from zoneinfo import ZoneInfo
 
 from .sources import Announcement, Assignment, D3l, Event, SourceError, Weather, day_bounds
 from .store import Person, WidgetPlacement
+
+logger = logging.getLogger(__name__)
 
 CALENDAR_DAYS = 7          # the calendar shows today and the next six days
 ASSIGNMENTS_SHOWN = 8
@@ -113,6 +116,11 @@ async def build(person: Person, placements: list[WidgetPlacement], d3l: D3l, wea
     for name, result in zip(names, results):
         if isinstance(result, SourceError):
             errors[name] = result
+        elif isinstance(result, Exception):
+            # Something we didn't plan for, e.g. Brightspace sent an item in an odd shape. Only
+            # the widgets that need this source go without; the rest of the mirror still shows.
+            logger.error("Reading %s for person %d failed unexpectedly", name, person.id, exc_info=result)
+            errors[name] = SourceError("unavailable", f"Couldn't read {name}")
         elif isinstance(result, BaseException):
             raise result
         else:
