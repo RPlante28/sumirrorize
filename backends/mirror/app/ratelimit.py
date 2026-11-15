@@ -7,9 +7,8 @@ from fastapi import Request
 
 
 def client_address(request: Request) -> str:
-    """Behind Cloudflare the real address is in CF-Connecting-IP."""
-    forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "")
-    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    """The address our nginx proxy overwrites, never a forwarding chain supplied by the caller."""
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
 
 
 class RateLimiter:

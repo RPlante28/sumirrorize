@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mirror layout · Sumirrorize</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='layout-editor.css') }}">
+  <script type="module" src="{{ url_for('static', filename='layout-editor.js') }}"></script>
+</head>
+<body>
+  <header class="editor-header">
+    <div class="header-title">
+      <a class="back-link" href="{{ url_for('home') }}">Settings</a>
+      <span aria-hidden="true">/</span>
+      <h1>Mirror layout</h1>
+    </div>
+    <div class="header-actions">
+      <button id="toggle-widgets" class="widgets-toggle" type="button" aria-controls="widget-panel" aria-expanded="false">☰ Widgets</button>
+      <button id="save-layout" class="primary" type="button">Save layout</button>
+    </div>
+  </header>
+
+  <main class="editor-shell">
+    <aside id="widget-panel" class="widget-panel" aria-labelledby="widget-heading">
+      <h2 id="widget-heading">Widgets</h2>
+      <div id="widget-list" class="widget-list"></div>
+    </aside>
+    <section class="preview-panel" aria-labelledby="preview-heading">
+      <h2 id="preview-heading">Drag and resize the boxes</h2>
+      <div class="mirror-frame">
+        <div id="layout-canvas" class="layout-canvas" aria-label="Editable mirror layout"></div>
+      </div>
+      <p id="editor-status" class="editor-status" role="status" aria-live="polite">Not saved</p>
+    </section>
+  </main>
+  <div id="widget-data" data-widgets="{{ widgets|tojson|forceescape }}" hidden></div>
+</body>
+</html>

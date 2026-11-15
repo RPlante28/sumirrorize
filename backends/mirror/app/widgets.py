@@ -98,13 +98,9 @@ def summarize(events: Optional[list[Event]], assignments: Optional[list[Assignme
 
 
 async def build(person: Person, placements: list[WidgetPlacement], d3l: D3l, weather: Weather,
-                google: GoogleCalendar, zone: ZoneInfo) -> list[dict[str, Any]]:
+                google: GoogleCalendar, zone: ZoneInfo, units: str = "imperial") -> list[dict[str, Any]]:
     now = datetime.now(zone)
     needed = set().union(*(NEEDS.get(p.key, set()) for p in placements))
-
-    # weather uses the units setting on the person's weather widget
-    weather_settings = next((p.settings for p in placements if p.key == "weather"), {})
-    units = weather_settings.get("units", "imperial")
     start, end = day_bounds(now, CALENDAR_DAYS)
 
     brightspace = d3l.for_person(person.id)

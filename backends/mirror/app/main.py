@@ -127,11 +127,14 @@ def create_app(
         if not person:
             raise ApiError(401, "This person no longer exists", "pass_expired")
         placements = await state.store.enabled_widgets(person_id)
+        units = await state.store.weather_units(person_id)
         return {
             "person": {"id": person.id, "name": person.name},
             "timezone": settings.timezone.key,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
-            "widgets": await widgets.build(person, placements, state.d3l, state.weather, state.google, settings.timezone),
+            "widgets": await widgets.build(
+                person, placements, state.d3l, state.weather, state.google, settings.timezone, units
+            ),
         }
 
     @app.get("/api/health")

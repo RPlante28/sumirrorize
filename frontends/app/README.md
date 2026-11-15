@@ -8,7 +8,8 @@ Where people set up their mirror, at **https://sumirrorize-api.marist.dev**. The
    service checks each one, and if one isn't good enough (too dark, too far away, nobody in it,
    someone else in it), the page says which to retake and why.
 3. **Connect Brightspace.** This opens d3l's sign-in tab, where they sign in to Marist as usual.
-4. **Pick their settings:** weather in Fahrenheit or Celsius, and an API key for their own apps if they want one.
+4. **Pick their settings:** weather units, visible widgets, widget styles and layout, plus an API
+   key for their own apps if they want one.
 
 After that, stepping up to the mirror at https://sumirrorize.marist.dev shows their day.
 
@@ -77,7 +78,7 @@ this app" page first and have to click through it.
 
 ## Routes
 
-Pages: `/` (sign-in, or settings once signed in), `/faces` (face pictures).
+Pages: `/` (sign-in, or settings once signed in), `/faces` (face pictures), `/layout` (widgets).
 
 The pages call these, with the login cookie. Errors look like `{"error": "...", "code": "..."}`.
 
@@ -89,6 +90,7 @@ The pages call these, with the login cookie. Errors look like `{"error": "...", 
 | `DELETE /me/brightspace` | Disconnects Brightspace |
 | `PUT /me/units` | `{"units": "imperial"}` or `"metric"`: the mirror's weather units |
 | `DELETE /me/calendar` | Disconnects Google Calendar. To connect, send the browser to `/login?calendar=1` |
+| `PUT /me/widgets` | Saves every widget's visibility, position, size and visual variant |
 | `POST /me/api-key` | Makes a new API key (`{"apiKey": ...}`), shown once. The old one stops working |
 | `DELETE /me` | Deletes the account: face pictures, Brightspace login, calendar access, settings |
 | `POST /logout` | Signs out |
