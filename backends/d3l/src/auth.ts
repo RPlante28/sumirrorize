@@ -11,6 +11,7 @@ const KEEP_ALIVE_INTERVAL = 30 * 60_000;
 const XSRF_TOKEN = /localStorage\.setItem\('XSRF\.Token','([^']+)'\)/;
 // where Brightspace sends a browser whose session has ended
 const LOGIN_PATH = "/d2l/login";
+const REQUEST_TIMEOUT = 15_000;
 
 type Token = { token: string; expiresAt: number };
 
@@ -28,7 +29,7 @@ function cookieHeader(cookies: Cookie[]): string {
 
 async function ask(path: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(`${BASE_URL}${path}`, init);
+    return await fetch(`${BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT) });
   } catch (error) {
     throw brightspaceUnavailable(`couldn't reach it: ${(error as Error).message}`);
   }

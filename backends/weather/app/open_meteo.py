@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -89,7 +90,7 @@ async def fetch_forecast(client: httpx.AsyncClient, latitude: float, longitude: 
     data = response.json()
 
     # times come back local with no offset
-    zone = timezone(timedelta(seconds=data["utc_offset_seconds"]))
+    zone = ZoneInfo(data["timezone"])
 
     def local_time(text: str) -> datetime:
         return datetime.fromisoformat(text).replace(tzinfo=zone)

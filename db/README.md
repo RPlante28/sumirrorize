@@ -58,7 +58,7 @@ person --< picture          any number, each labeled with its angle (front, left
 | Table | What it holds |
 |---|---|
 | `person` | `person_id`, `display_name`, `api_key_hash` (the SHA-256 of their API key; the key itself is never stored), and `google_sub`: the ID of the Google account they sign in to the app with. |
-| `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the face's fingerprint, 128 numbers from OpenCV's SFace model. A new upload replaces the person's whole set. Only the [faces service](../backends/faces/README.md) reads or writes this table; save faces through it rather than inserting rows yourself. |
+| `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), and `face_encoding`: 128 numbers from OpenCV's SFace model. The legacy `image` column holds only a SHA-256 digest for new enrollments. |
 | `widget` | The widgets the mirror offers (`clock`, `greeting`, `summary`, `weather`, `calendar`, `assignments`, `announcements`), each with a description and a default layout. |
 | `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"units": "metric", "variant": "hourly"}`). |
 | `brightspace_session` | The person's saved Brightspace login, encrypted by d3l. Only d3l reads or writes it; ask d3l (`GET /session`) whether someone is signed in. |
@@ -74,16 +74,12 @@ Things the database does for you:
 - Deleting a person deletes their pictures, widgets, Brightspace login and calendar access.
 - `updated_at` is set automatically on every change.
 
-## Face photos are stored
+## Face photos are not stored
 
-The `picture` table keeps each sign-up photo itself (`image`) next to its fingerprint
-(`face_encoding`). **Nothing reads the photos back:** recognition only compares fingerprints.
-They're kept so fingerprints could be remade if the face model ever changes.
-
-That means anyone who gets a copy of the database gets everyone's face photos. For the demo
-that's accepted. Before real use, stop storing them: have the faces service save only the
-fingerprint, and make `image` and `mime_type` optional (or drop them) in a new migration. A
-model change would then mean asking people to retake their pictures.
+The faces service decodes each sign-up photo in memory, saves its fingerprint and a one-way
+SHA-256 digest, then discards the photo. The digest uses the existing `image` column so this does
+not require a database migration. Older rows may still contain original photos; delete those
+separately only after taking any required backup and getting approval for permanent deletion.
 
 ## Common queries
 

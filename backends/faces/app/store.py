@@ -13,7 +13,7 @@ import numpy as np
 @dataclass(frozen=True)
 class NewPicture:
     angle: str
-    image: bytes
+    image_digest: bytes
     mime_type: str
     fingerprint: np.ndarray
 
@@ -69,7 +69,7 @@ class PostgresStore:
             await connection.executemany(
                 """INSERT INTO picture (person_id, angle, image, mime_type, face_encoding)
                    VALUES ($1, $2, $3, $4, $5::vector)""",
-                [(person_id, p.angle, p.image, p.mime_type, _vector(p.fingerprint)) for p in pictures],
+                [(person_id, p.angle, p.image_digest, p.mime_type, _vector(p.fingerprint)) for p in pictures],
             )
 
     async def delete_pictures(self, person_id: int) -> int:

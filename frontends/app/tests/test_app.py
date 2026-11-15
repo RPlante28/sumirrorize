@@ -350,12 +350,12 @@ def test_delete_account(world):
     assert client.get("/").data.count(b"Continue with Google") == 1  # signed out
 
 
-def test_delete_account_waits_for_d3l(world):
+def test_delete_account_continues_when_d3l_is_down(world):
     client, store, _, services = world
     sign_in(client)
     services.down.add("d3l")
-    assert send(client, "DELETE", "/me").status_code == 503
-    assert 1 in store.people
+    assert send(client, "DELETE", "/me").status_code == 204
+    assert store.people == {}
 
 
 def test_calendar_connects_when_google_sends_a_token(world):

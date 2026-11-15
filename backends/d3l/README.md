@@ -29,6 +29,7 @@ or directly (needs a machine Chromium can run on, e.g. your laptop):
 
 ```bash
 npm install            # also downloads Chromium
+npm test               # TypeScript build and security checks
 npm run dev            # http://localhost:3100
 ```
 

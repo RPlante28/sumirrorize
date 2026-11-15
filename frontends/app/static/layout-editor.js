@@ -137,26 +137,28 @@ function useKeyboard(event, widget) {
 function changed(message) { status.textContent = `${message} Not saved.`; }
 
 document.getElementById("save-layout").addEventListener("click", async (event) => {
-  event.currentTarget.disabled = true;
+  const button = event.currentTarget;
+  button.disabled = true;
   try {
     await api("PUT", "/me/widgets", { widgets });
     status.textContent = "Saved.";
   } catch (error) {
     status.textContent = `Could not save: ${error.message}`;
   } finally {
-    event.currentTarget.disabled = false;
+    button.disabled = false;
   }
 });
 
 document.getElementById("reset-layout").addEventListener("click", async (event) => {
   if (!confirm("Reset every widget to the default layout?")) return;
-  event.currentTarget.disabled = true;
+  const button = event.currentTarget;
+  button.disabled = true;
   try {
     await api("POST", "/me/widgets/reset");
     location.reload();
   } catch (error) {
     status.textContent = `Could not reset: ${error.message}`;
-    event.currentTarget.disabled = false;
+    button.disabled = false;
   }
 });
 

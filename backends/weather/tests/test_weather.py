@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+from copy import deepcopy
+from datetime import timedelta
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+from app.open_meteo import fetch_forecast
 
 SETTINGS = Settings(latitude=41.7225, longitude=-73.9343, label="Poughkeepsie, NY")
 
@@ -176,3 +181,23 @@ def test_alerts_down_still_gives_weather(fake):
 def test_health(fake):
     with client_for(fake) as client:
         assert client.get("/health").json() == {"ok": True}
+
+
+def test_hourly_offsets_follow_daylight_saving_time():
+    data = deepcopy(OPEN_METEO)
+    data["timezone"] = "America/New_York"
+    data["utc_offset_seconds"] = -4 * 60 * 60
+    data["hourly"] = {
+        "time": ["2026-11-01T01:00", "2026-11-01T02:00"],
+        "temperature_2m": [10, 9], "precipitation_probability": [0, 0],
+        "weather_code": [0, 0], "is_day": [0, 0],
+    }
+
+    async def load():
+        transport = httpx.MockTransport(lambda _request: httpx.Response(200, json=data))
+        async with httpx.AsyncClient(transport=transport) as client:
+            return await fetch_forecast(client, 41.7, -73.9)
+
+    forecast = asyncio.run(load())
+    assert forecast.hourly[0].time.utcoffset() == timedelta(hours=-4)
+    assert forecast.hourly[1].time.utcoffset() == timedelta(hours=-5)

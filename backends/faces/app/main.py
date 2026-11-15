@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import hashlib
 import hmac
 import logging
 import re
@@ -160,7 +161,8 @@ def create_app(settings: Optional[Settings] = None, store: Optional[Store] = Non
             problem = enrollment_problem(analysis)
             results.append({"angle": picture.angle, "problem": problem})
             if problem is None:
-                new.append(NewPicture(picture.angle, data, mime, analysis.faces[0].fingerprint))
+                new.append(NewPicture(
+                    picture.angle, hashlib.sha256(data).digest(), mime, analysis.faces[0].fingerprint))
 
         # of the ones that are fine on their own, any that show somebody else
         good = [result for result in results if result["problem"] is None]

@@ -91,7 +91,7 @@ class AuthlibGoogle:
     def revoke(self, refresh_token: str) -> None:
         """Tells Google to forget the access it gave us. Best effort."""
         try:
-            httpx.post("https://oauth2.googleapis.com/revoke", data={"token": refresh_token}, timeout=10)
+            httpx.post("https://oauth2.googleapis.com/revoke", data={"token": refresh_token}, timeout=10).raise_for_status()
         except httpx.HTTPError as error:
             logger.warning("Couldn't revoke a Google token: %r", error)
 
@@ -352,8 +352,11 @@ def create_app(
     @login_required
     def delete_account():
         person = me()
-        # d3l first, so it stops any sign-in and drops the login it holds in memory
-        d3l.sign_out(person.id)
+        try:
+            d3l.sign_out(person.id)
+        except ServiceError as error:
+            # Database deletion still revokes every credential d3l can use for this person.
+            logger.warning("Deleting person %d while d3l is unavailable: %s", person.id, error.message)
         forget_calendar(person.id)
         db.delete_person(person.id)
         logout_user()

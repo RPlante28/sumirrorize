@@ -17,7 +17,7 @@ and `static/`). It doesn't store anything itself:
 
 ```
  browser --> app --> Postgres: people, settings, API keys
-               +--> faces: save face pictures (only faces touches face data)
+               +--> faces: check pictures and save face fingerprints
                +--> d3l: start a Brightspace sign-in, check or end it
  browser --> d3l sign-in tab (/api/login/<one-time link>)
 ```

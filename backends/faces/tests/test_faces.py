@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import Settings
+from app.config import Settings, load_settings
 from app.engine import Analysis, BadImage, Face
 from app.main import create_app
 from app.store import Match, SavedPicture
@@ -118,7 +118,7 @@ def test_enroll_then_recognize(client, store):
     assert response.json() == {"saved": 3, "pictures": [
         {"angle": "front", "problem": None}, {"angle": "left", "problem": None}, {"angle": "right", "problem": None}]}
     assert [p.angle for p in store.pictures[3]] == ["front", "left", "right"]
-    assert store.pictures[3][0].image == b"face:alex" and store.pictures[3][0].mime_type == "image/jpeg"
+    assert len(store.pictures[3][0].image_digest) == 32
 
     body = identify(client, "face:alex~0.5").json()
     assert body["faces"] == 1 and body["match"]["personId"] == 3 and body["match"]["similarity"] > 0.8
@@ -211,3 +211,11 @@ def test_forget(client, store):
     enroll(client, 3, front="face:alex")
     assert client.delete("/people/3/faces").json() == {"deleted": 1}
     assert identify(client, "face:alex").json()["match"] is None
+
+
+def test_match_threshold_must_be_a_similarity(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://unused")
+    monkeypatch.setenv("FACES_API_KEY", KEY)
+    monkeypatch.setenv("FACES_MATCH_THRESHOLD", "-1")
+    with pytest.raises(RuntimeError, match="between 0 and 1"):
+        load_settings()

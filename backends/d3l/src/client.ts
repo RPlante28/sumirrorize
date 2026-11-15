@@ -1,14 +1,22 @@
 import { forgetToken, getToken } from "./auth.js";
 import { D2L_HOST } from "./config.js";
-import { ApiError } from "./errors.js";
+import { ApiError, brightspaceUnavailable } from "./errors.js";
 
 const MAX_PAGES = 50;
+const REQUEST_TIMEOUT = 15_000;
 
 type PagedResultSet = { PagingInfo: { Bookmark: string; HasMoreItems: boolean }; Items: unknown[] };
 type ObjectListPage = { Next: string | null; Objects: unknown[] };
 
 async function send(url: URL, token: string): Promise<Response> {
-  return fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  try {
+    return await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT),
+    });
+  } catch (error) {
+    throw brightspaceUnavailable(`couldn't reach it: ${(error as Error).message}`);
+  }
 }
 
 /** GETs a Brightspace API path (e.g. "le/1.100/123/news/") as this person. Renews their token once if rejected. */

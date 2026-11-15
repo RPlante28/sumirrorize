@@ -1,10 +1,14 @@
 # Sumirrorize
 
-A smart mirror for students. It will recognize the user and show their morning
+A smart mirror for students. It recognizes the user and shows their morning
 greeting, weather, schedule, assignments, and a quick summary of the day.
 
-A web app will let students set up their account and customize what appears on
+A web app lets students set up their account and customize what appears on
 the mirror.
+
+This README covers the standalone camera prototype in `scripts/`. The deployed web stack lives
+under `backends/` and `frontends/`; start with [backends/README.md](backends/README.md),
+[frontends/README.md](frontends/README.md), and `docker-compose.yml`.
 
 ## Setup
 
@@ -60,7 +64,7 @@ Press Escape or close the window to exit. Without a trained model, the mirror st
 only draws face boxes.
 
 Once recognized, a user stays active through brief missed or unknown detections. The mirror clears
-them after 15 seconds without a usable confirmation, or switches after another person is confirmed.
+them after 8 seconds without a usable confirmation, or switches after another person is confirmed.
 
 ## Local data
 

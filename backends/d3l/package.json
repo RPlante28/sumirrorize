@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "postinstall": "playwright install chromium"
@@ -25,5 +26,8 @@
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.2",
     "typescript": "^5.3.0"
+  },
+  "overrides": {
+    "qs": "6.17.1"
   }
 }

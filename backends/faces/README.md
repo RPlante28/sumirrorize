@@ -2,8 +2,8 @@
 
 The only part of Sumirrorize that handles face pictures and fingerprints. It does two jobs:
 
-1. **Sign-up:** saves a person's face pictures, each with a *fingerprint*: 128 numbers that are
-   close together for the same person.
+1. **Sign-up:** checks a person's face pictures and saves a *fingerprint* from each: 128 numbers
+   that are close together for the same person. Raw photos are discarded.
 2. **At the mirror:** takes a camera frame and says whose face it is, by finding the closest
    saved fingerprint, and how open their eyes are (for the mirror's blink check).
 
@@ -144,8 +144,8 @@ docker run --rm --network sumirrorize -v /path/to/photos:/photos:ro \
   closed and open again, so a photo held up to the camera (or sent straight to the server)
   doesn't get in. A video of them blinking still would: this stops the easy trick, not a
   determined one. Recognizing a photo also still tells whoever holds it the person's first name.
-- **Face photos are kept, though only the fingerprints are used.** See the note in
-  [db/README.md](../../db/README.md#face-photos-are-stored).
+- **New face photos are not kept.** Older database rows may still contain photos; see
+  [db/README.md](../../db/README.md#face-photos-are-not-stored).
 
 ## Files
 
