@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 from typing import Optional
 
 import numpy as np
@@ -12,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.engine import Analysis, BadImage, Face
 from app.main import create_app
-from app.store import Match
+from app.store import Match, SavedPicture
 
 KEY = "faces-key-0123456789abcdef0123456789ab"
 SETTINGS = Settings(database_url="unused", api_key=KEY, models_dir=None)  # type: ignore[arg-type]
@@ -55,6 +56,10 @@ class FakeStore:
 
     async def person_exists(self, person_id):
         return person_id in (3, 4)
+
+    async def saved_pictures(self, person_id):
+        saved_at = datetime(2026, 11, 14, tzinfo=timezone.utc)
+        return [SavedPicture(p.angle, saved_at) for p in self.pictures.get(person_id, [])]
 
     async def replace_pictures(self, person_id, pictures):
         self.pictures[person_id] = list(pictures)
@@ -168,6 +173,15 @@ def test_bad_requests(client):
     assert enroll(client, 3, front="broken").json()["code"] == "bad_image"
     assert identify(client, "broken").json()["code"] == "bad_image"
     assert client.post("/identify", content=b"").json()["code"] == "too_large"
+
+
+def test_list_saved_pictures(client):
+    assert client.get("/people/3/faces").json() == {"pictures": []}
+    enroll(client, 3, front="face:alex", left="face:alex~0.2")
+    body = client.get("/people/3/faces").json()
+    assert [p["angle"] for p in body["pictures"]] == ["front", "left"]
+    assert "image" not in body["pictures"][0]
+    assert client.get("/people/99/faces").json()["code"] == "no_such_person"
 
 
 def test_forget(client, store):
