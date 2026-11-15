@@ -49,6 +49,7 @@ Errors come back as `{ "error": "...", "code": "..." }`. Codes worth handling:
 | `bad_person_id` | 400/404 | Service key used without a valid `X-Person-Id` |
 | `signin_required` | 401 | This person isn't signed in to Brightspace (or their session ended) |
 | `brightspace_error` | varies | Brightspace said no, e.g. `403` for a course whose access has ended |
+| `brightspace_unavailable` | 503 | Brightspace or the school's login site is down or answering oddly. The person's saved login is kept; try again later |
 | `busy` | 503 | Too many sign-ins in progress at once |
 
 ## Signing in to Brightspace
@@ -59,8 +60,8 @@ uses it through a tab that shows its screen and passes their clicks and typing b
 
 1. The app calls `POST /login` and gets back `{ "path": "/login/<one-time token>", "expiresAt": ... }`.
 2. The app opens `<d3l address><path>` in a new tab (`window.open`). The student signs in there
-   as usual. The link is the tab's only credential: it works in one tab at a time, expires
-   after 10 minutes, and stops working once used.
+   as usual, on a computer or a phone. The link is the tab's only credential: it works in one
+   tab at a time, expires after 10 minutes, and stops working once used.
 3. When Brightspace is reached, d3l saves the session (encrypted) for that person, and the tab
    says they're signed in and closes itself.
 4. Meanwhile the app polls `GET /session` until `signedIn` is `true`.
@@ -75,6 +76,29 @@ After that, d3l renews everyone's session every 30 minutes, so it never reaches 
 3-hour idle timeout. If a session ends anyway, d3l first tries to renew it in the background
 with the saved school login. If that fails, the person's requests return `signin_required` and
 they need to sign in again.
+
+**A saved login is only deleted when Brightspace says the session has ended,** which it does by
+sending the browser to its login page. If Brightspace or the school's login site is down, or
+answers with an error or maintenance page, requests return `brightspace_unavailable` and the
+login stays saved for when it's back.
+
+### On a phone
+
+The tab is a picture of the remote browser, and phones only bring up their keyboard for a real
+text field. So a tap on the picture clicks there and puts the cursor in an invisible text field,
+and whatever is typed into it is passed on. Dragging a finger scrolls the remote page.
+
+### What the sign-in browser can reach
+
+It's a real browser on our server, steered by whoever is signing in, so it's fenced in two ways:
+
+- **Only the public internet, over HTTPS.** All its traffic goes through a small proxy inside
+  d3l (`src/egress.ts`) that refuses private addresses: this machine, the database, the other
+  services, anything else on the server's networks.
+- **Only the sign-in sites.** The tab can open pages on Brightspace and on the sites listed in
+  `SIGN_IN_HOSTS` (the school's login site, and Duo or similar if it's used). Following a link
+  anywhere else does nothing. If signing in stops working at some step, d3l's log names the
+  site it blocked; add it to `SIGN_IN_HOSTS`.
 
 ## Data routes
 
@@ -133,8 +157,9 @@ Every `:param` must be a numeric ID.
 | `src/index.ts` | Routes and startup |
 | `src/callers.ts` | Works out which person a request is for |
 | `src/remote-login.ts` | The sign-in tab: runs the browser and streams it |
-| `public/login.*` | The sign-in tab's page |
+| `public/login.*` | The sign-in tab's page, including phone keyboard and touch handling |
+| `src/egress.ts` | The proxy that keeps the sign-in browser on the public internet |
 | `src/auth.ts` | Turns saved sessions into API tokens and keeps them alive |
 | `src/sessions.ts`, `src/vault.ts` | Saving sessions in the database, encrypted |
-| `src/browser.ts` | The shared headless Chromium and background re-login |
+| `src/browser.ts` | The shared headless Chromium, which sites it may open, and background re-login |
 | `src/client.ts` | Calls Brightspace and merges paged results |

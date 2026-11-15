@@ -62,6 +62,22 @@ header {
   touch-action: none;
 }
 
+/* The invisible text field that brings up a phone's keyboard. It's moved to wherever the picture
+   was tapped, so the phone scrolls that spot above the keyboard. 16px stops iPhones zooming in. */
+#keys {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  opacity: 0;
+  font-size: 16px;
+  pointer-events: none;
+}
+
 #message {
   max-width: 420px;
   padding: 0 16px;

@@ -240,6 +240,7 @@ class Weather:
 class Identified:
     faces: int                     # how many faces were in the picture
     person_id: Optional[int]       # who it is, if recognized
+    eyes_open: Optional[float]     # how open their eyes are, 0-1 (None if no face is close enough)
 
 
 class Faces:
@@ -264,7 +265,7 @@ class Faces:
         if response.is_error:
             raise SourceError("faces_unavailable", f"Faces service returned {response.status_code}")
         body = response.json()
-        return Identified(body["faces"], body["match"]["personId"] if body["match"] else None)
+        return Identified(body["faces"], body["match"]["personId"] if body["match"] else None, body["eyesOpen"])
 
 
 def _code(response: httpx.Response) -> Optional[str]:

@@ -62,6 +62,9 @@ html, body {
 .idle-time { font-size: 16vmin; font-weight: 200; line-height: 1; font-variant-numeric: tabular-nums; }
 .idle-date { font-size: 3.5vmin; color: var(--muted); }
 .idle-prompt { margin-top: 6vh; font-size: 2.6vmin; color: var(--muted); }
+/* "Hi, Alex", shown over the prompt once the mirror recognizes someone and waits for their blink. */
+.idle-hello { margin: 5vh 0 0; font-size: 7vmin; font-weight: 200; }
+.idle-hello + .idle-prompt { margin-top: 1vh; font-size: 3.2vmin; color: var(--text); }
 
 #camera-retry {
   font: inherit;
@@ -77,10 +80,15 @@ html, body {
 
 /* --- Mirror --- */
 
-/* Each widget is a bordered card at its saved position. Text inside sizes to the card:
-   cqh/cqw are percentages of the card's height/width. */
+/* Each widget is a bordered card at its saved position (--x, --y, --w, --h, as fractions of the
+   screen, set by mirror.js). Text inside sizes to the card: cqh/cqw are percentages of the
+   card's height/width. */
 .widget {
   position: absolute;
+  left: calc(var(--x) * 100%);
+  top: calc(var(--y) * 100%);
+  width: calc(var(--w) * 100%);
+  height: calc(var(--h) * 100%);
   container-type: size;
   overflow: hidden;
   padding: 1.6vmin 2vmin;
@@ -92,7 +100,7 @@ html, body {
 .widget-content { height: 100%; }
 
 .widget-error {
-  color: var(--faint);
+  color: var(--muted);
   font-size: clamp(13px, min(4.2cqw, 9cqh), 26px);
 }
 
@@ -209,3 +217,50 @@ html, body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* --- Tall screens (a phone held upright) ---
+   Saved positions are for wide screens. Here mirror.js groups the widgets instead: clock, weather,
+   greeting and summary across the top, and everything else in a row of cards along the bottom to
+   swipe through. The middle stays clear for your reflection. */
+
+#widgets.tall {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: max(1.5vh, env(safe-area-inset-top)) 0 max(2.5vh, env(safe-area-inset-bottom));
+}
+.tall .widget { position: relative; left: auto; top: auto; width: auto; flex: none; }
+
+.tall-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2vh 2.5vw;
+  padding: 0 3vw;
+}
+.tall-top .widget { height: 13vh; }
+.tall-top .alone,
+.tall-top [data-key="greeting"],
+.tall-top [data-key="summary"] { grid-column: 1 / -1; }
+.tall-top [data-key="greeting"] { height: 6.5vh; }
+.tall-top [data-key="summary"] { height: 9.5vh; }
+/* The weather card is small here: drop the hour-by-hour row and give the temperature the room. */
+.tall-top .hourly { display: none; }
+.tall-top .weather-now svg { width: min(34cqh, 22cqw); height: min(34cqh, 22cqw); }
+.tall-top .weather-temp { font-size: min(38cqh, 24cqw); }
+.tall-top .weather-desc { font-size: min(12cqh, 7.5cqw); }
+.tall-top .weather-detail, .tall-top .weather-alert { font-size: min(10cqh, 6.2cqw); }
+
+.tall-cards {
+  display: flex;
+  gap: 3vw;
+  padding: 0 3vw;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.tall-cards::-webkit-scrollbar { display: none; }
+/* A little narrower than the screen, so the edge of the next card shows there's more to swipe to. */
+.tall-cards .widget { width: 86vw; height: 36vh; scroll-snap-align: center; }
+.tall-cards .widget:only-child { width: 94vw; }

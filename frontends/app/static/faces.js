@@ -18,6 +18,7 @@ const PROBLEMS = {
   several_faces: "There's more than one face in the picture. Make sure only you are in view.",
   too_small: "Your face is too small. Move closer to the camera.",
   bad_lighting: "It's too dark or too bright. Face a light, or move away from a bright window.",
+  different_person: "This doesn't look like the same person as your other pictures. Make sure it's only you.",
 };
 
 const MAX_SIDE = 1280; // plenty for recognition, and keeps uploads small

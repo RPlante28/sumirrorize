@@ -8,3 +8,8 @@ export class ApiError extends Error {
 export function signInRequired(): ApiError {
   return new ApiError(401, "This person needs to sign in to Brightspace (POST /login)", "signin_required");
 }
+
+/** Brightspace (or the school's login site) is down or answering oddly. Says nothing about anyone's session. */
+export function brightspaceUnavailable(detail: string): ApiError {
+  return new ApiError(503, `Brightspace isn't answering properly right now (${detail})`, "brightspace_unavailable");
+}

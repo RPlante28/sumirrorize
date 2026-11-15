@@ -21,6 +21,13 @@ if (SESSION_ENCRYPTION_KEY.length !== 32) {
   throw new Error("SESSION_ENCRYPTION_KEY must be 32 bytes, base64 encoded (openssl rand -base64 32)");
 }
 
+// The sites a sign-in may open pages on, besides Brightspace itself: the school's login site and
+// whatever it sends people to for a second step (e.g. Duo). A site covers its subdomains too.
+export const SIGN_IN_HOSTS = [
+  D2L_HOST,
+  ...required("SIGN_IN_HOSTS").toLowerCase().split(",").map((host) => host.trim()).filter(Boolean),
+];
+
 // Latest versions this host supports: GET https://<host>/d2l/api/versions/
 export const LP = "lp/1.64";
 export const LE = "le/1.100";
