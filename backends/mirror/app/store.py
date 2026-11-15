@@ -30,6 +30,7 @@ class Store(Protocol):
     async def person(self, person_id: int) -> Optional[Person]: ...
     async def enabled_widgets(self, person_id: int) -> list[WidgetPlacement]: ...
     async def google_token(self, person_id: int) -> Optional[bytes]: ...
+    async def weather_units(self, person_id: int) -> str: ...
 
 
 class PostgresStore:
@@ -68,3 +69,10 @@ class PostgresStore:
             WidgetPlacement(r["widget_key"], r["name"], r["x"], r["y"], r["w"], r["h"], r["settings"])
             for r in rows
         ]
+
+    async def weather_units(self, person_id: int) -> str:
+        value = await self._pool.fetchval(
+            "SELECT settings->>'units' FROM person_widget WHERE person_id = $1 AND widget_key = 'weather'",
+            person_id,
+        )
+        return value if value in {"imperial", "metric"} else "imperial"

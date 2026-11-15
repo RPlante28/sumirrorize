@@ -37,7 +37,14 @@ class FakeStore:
             if p["sub"] == google_sub:
                 return Person(person_id, p["name"]), False
         person_id = len(self.people) + 1
-        self.people[person_id] = {"sub": google_sub, "name": name, "units": None, "key_hash": None, "calendar": None}
+        self.people[person_id] = {"sub": google_sub, "name": name, "units": None, "key_hash": None,
+                                  "calendar": None,
+                                  "widgets": [
+                                      {"key": "clock", "name": "Clock", "enabled": True,
+                                       "x": .1, "y": .1, "w": .3, "h": .2, "variant": None},
+                                      {"key": "weather", "name": "Weather", "enabled": True,
+                                       "x": .6, "y": .1, "w": .3, "h": .2, "variant": None},
+                                  ]}
         return Person(person_id, name), True
 
     def units(self, person_id):
@@ -45,6 +52,16 @@ class FakeStore:
 
     def set_units(self, person_id, units):
         self.people[person_id]["units"] = units
+
+    def widgets(self, person_id):
+        return self.people[person_id]["widgets"]
+
+    def set_widgets(self, person_id, widgets):
+        current = self.people[person_id]["widgets"]
+        if {widget["key"] for widget in widgets} != {widget["key"] for widget in current}:
+            raise ValueError("save every available widget")
+        names = {widget["key"]: widget["name"] for widget in current}
+        self.people[person_id]["widgets"] = [{**widget, "name": names[widget["key"]]} for widget in widgets]
 
     def new_api_key(self, person_id):
         key = f"key-{person_id}-{len(str(self.people))}"
@@ -214,6 +231,27 @@ def test_units(world):
     assert send(client, "PUT", "/me/units", {"units": "metric"}).json == {"units": "metric"}
     assert store.people[1]["units"] == "metric"
     assert send(client, "PUT", "/me/units", {"units": "kelvin"}).json["code"] == "bad_request"
+
+
+def test_layout_page_and_save(world):
+    client, store, *_ = world
+    sign_in(client)
+    assert client.get("/layout").status_code == 200
+    widgets = store.widgets(1)
+    widgets[0] = {**widgets[0], "x": .2, "variant": "time"}
+    widgets[1] = {**widgets[1], "variant": "hourly"}
+    assert send(client, "PUT", "/me/widgets", {"widgets": widgets}).json == {"ok": True}
+    assert store.widgets(1)[0]["x"] == .2
+    assert store.widgets(1)[1]["variant"] == "hourly"
+
+
+def test_layout_save_is_all_or_nothing(world):
+    client, store, *_ = world
+    sign_in(client)
+    before = list(store.widgets(1))
+    response = send(client, "PUT", "/me/widgets", {"widgets": [before[0]]})
+    assert response.status_code == 400 and response.json["code"] == "bad_layout"
+    assert store.widgets(1) == before
 
 
 def test_save_faces(world):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 from psycopg_pool import ConnectionPool
 
@@ -30,6 +30,8 @@ class Store(Protocol):
     def sign_in(self, google_sub: str, name: str) -> tuple[Person, bool]: ...
     def units(self, person_id: int) -> str: ...
     def set_units(self, person_id: int, units: str) -> None: ...
+    def widgets(self, person_id: int) -> list[dict[str, Any]]: ...
+    def set_widgets(self, person_id: int, widgets: list[dict[str, Any]]) -> None: ...
     def new_api_key(self, person_id: int) -> str: ...
     def calendar_token(self, person_id: int) -> Optional[bytes]: ...
     def save_calendar(self, person_id: int, sealed_token: bytes) -> None: ...
@@ -84,6 +86,36 @@ class PostgresStore:
                    WHERE person_id = %s AND widget_key = 'weather'""",
                 (units, person_id),
             )
+
+    def widgets(self, person_id: int) -> list[dict[str, Any]]:
+        with self._pool.connection() as db:
+            rows = db.execute(
+                """SELECT pw.widget_key, w.name, pw.enabled, pw.x, pw.y, pw.w, pw.h, pw.settings
+                   FROM person_widget pw JOIN widget w USING (widget_key)
+                   WHERE pw.person_id = %s ORDER BY pw.y, pw.x""",
+                (person_id,),
+            ).fetchall()
+        return [
+            {"key": row[0], "name": row[1], "enabled": row[2], "x": row[3], "y": row[4],
+             "w": row[5], "h": row[6], "variant": row[7].get("variant")}
+            for row in rows
+        ]
+
+    def set_widgets(self, person_id: int, widgets: list[dict[str, Any]]) -> None:
+        with self._pool.connection() as db:
+            existing = {row[0] for row in db.execute(
+                "SELECT widget_key FROM person_widget WHERE person_id = %s", (person_id,)
+            ).fetchall()}
+            if {widget["key"] for widget in widgets} != existing:
+                raise ValueError("save every available widget")
+            with db.cursor() as cursor:
+                cursor.executemany(
+                    """UPDATE person_widget
+                       SET enabled = %(enabled)s, x = %(x)s, y = %(y)s, w = %(w)s, h = %(h)s,
+                           settings = settings || jsonb_build_object('variant', %(variant)s::text)
+                       WHERE person_id = %(person_id)s AND widget_key = %(key)s""",
+                    [{**widget, "person_id": person_id} for widget in widgets],
+                )
 
     def new_api_key(self, person_id: int) -> str:
         """Replaces the person's API key, so the old one stops working."""

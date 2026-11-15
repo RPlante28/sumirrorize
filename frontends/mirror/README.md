@@ -38,6 +38,8 @@ judged by the server; see [the backend](../../backends/mirror/README.md).
   see-through cards over it.
 - **Widgets go where the person put them.** Each widget is positioned from its saved `x`, `y`,
   `w`, `h` (fractions of the screen).
+- **Widget styles are personal.** The app stores each widget's `variant` in its existing settings;
+  the mirror uses it for compact lists, weather detail, clock/date, greetings and announcements.
 - **Except on tall screens.** On a phone held upright (narrower than 4:5), saved positions would
   squeeze every widget into a thin strip, so the page arranges them itself: clock and weather
   side by side at the top, then the greeting and summary, your reflection in the middle, and

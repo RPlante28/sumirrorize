@@ -16,6 +16,7 @@ from flask import Flask, Response, jsonify, redirect, render_template, request, 
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 
 from .config import Settings, load_settings
+from .layout import LayoutError, validate_layout
 from .services import D3l, Faces, ServiceError
 from .store import UNITS, Person, PostgresStore, Store
 from .vault import Vault
@@ -226,6 +227,10 @@ def create_app(
     @app.get("/terms")
     def terms():
         return render_template("terms.html", contact_email=settings.contact_email)
+    @app.get("/layout")
+    @login_required
+    def layout():
+        return render_template("layout.html", widgets=db.widgets(me().id))
 
     # --- Google sign-in ---
 
@@ -298,6 +303,16 @@ def create_app(
             return jsonify(error=f"units must be one of {', '.join(UNITS)}", code="bad_request"), 400
         db.set_units(me().id, units)
         return jsonify(units=units)
+
+    @app.put("/me/widgets")
+    @login_required
+    def save_widgets():
+        try:
+            widgets = validate_layout(request.get_json(silent=True))
+            db.set_widgets(me().id, widgets)
+        except (LayoutError, ValueError) as error:
+            return jsonify(error=str(error), code="bad_layout"), 400
+        return jsonify(ok=True)
 
     @app.post("/me/api-key")
     @login_required
