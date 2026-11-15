@@ -36,6 +36,7 @@ Or, while your local data doesn't matter, wipe it and start fresh:
 | `002_widgets.sql` | The original widgets |
 | `003_brightspace_session.sql` | d3l's saved Brightspace logins |
 | `004_announcements_and_layout.sql` | The announcements widget, and a default layout that keeps the middle clear |
+| `005_google_accounts.sql` | Links each person to the Google account they sign in to the app with |
 
 Once there are many of these, a migration tool that tracks which files have run would be worth it
 (Alembic fits Python).
@@ -53,7 +54,7 @@ person ──< picture          any number, each labeled with its angle (front, 
 
 | Table | What it holds |
 |---|---|
-| `person` | `person_id`, `display_name`, and `api_key_hash`: the SHA-256 of their API key. The key itself is never stored. |
+| `person` | `person_id`, `display_name`, `api_key_hash` (the SHA-256 of their API key; the key itself is never stored), and `google_sub`: the ID of the Google account they sign in to the app with. |
 | `picture` | `pic_id`, `person_id`, `angle` (any lowercase label, e.g. `front`), the `image` bytes, `mime_type`, and `face_encoding`: the face's fingerprint, 128 numbers from OpenCV's SFace model. A new upload replaces the person's whole set. Only the [faces service](../backends/faces/README.md) reads or writes this table; save faces through it rather than inserting rows yourself. |
 | `widget` | The widgets the mirror offers (`clock`, `greeting`, `summary`, `weather`, `calendar`, `assignments`, `announcements`), each with a description and a default layout. |
 | `person_widget` | One row per person per widget: `enabled`, position `x`, `y`, `w`, `h`, and `settings` (JSON, e.g. `{"city": "Poughkeepsie"}`). |
@@ -71,12 +72,13 @@ Things the database does for you:
 
 ## Common queries
 
-**Sign up** (one transaction; the person's widgets are created automatically):
+**Sign up** (the [sign-up app](../frontends/app/README.md) does this on someone's first Google
+sign-in; their widgets are created automatically):
 ```sql
-INSERT INTO person (display_name, api_key_hash) VALUES ($1, $2) RETURNING person_id;
+INSERT INTO person (display_name, api_key_hash, google_sub) VALUES ($1, $2, $3) RETURNING person_id;
 ```
-Make the key with `secrets.token_urlsafe(32)`, store `hashlib.sha256(key.encode()).digest()`,
-and give the key to the person once.
+Keys are made with `secrets.token_urlsafe(32)` and stored as `hashlib.sha256(key.encode()).digest()`.
+The person sees the key once, when they ask the app for one.
 
 **Face pictures:** don't write these yourself. Send them to the faces service
 (`PUT /people/{id}/faces`), which checks each photo, makes its fingerprint, and replaces the
