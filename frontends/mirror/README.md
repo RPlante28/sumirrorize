@@ -7,13 +7,17 @@ Live at **https://sumirrorize.marist.dev**.
 
 ## Using it
 
-1. **Open it on the mirror computer** (the demo laptop) and allow the camera when the browser asks.
-   To skip the question next time, choose "always allow" for the site.
-2. **Walk up.** The page sends a camera frame to the server twice a second. Once it recognizes the
-   same person in 3 frames in a row (about 1.5 seconds), it shows their widgets.
-3. **Walk away.** About 8 seconds after it last recognized them, the mirror clears back to the
-   clock, and their data is removed from the page. If someone else steps up, it switches to them
-   the same way. Esc clears it right away.
+1. **Open it on the mirror computer** (the demo laptop, or a phone) and allow the camera when the
+   browser asks. To skip the question next time, choose "always allow" for the site.
+2. **Walk up.** The page sends a camera frame to the server twice a second. When it recognizes
+   someone, it says "Hi, Alex. Blink to open your mirror".
+3. **Blink.** While it waits, frames go up to 10 times a second so the blink isn't missed. Once
+   the server has seen it, the page shows their widgets. A photo of someone can't blink, so it
+   never gets past the greeting. If no blink is seen in 6 seconds, the page suggests closing
+   your eyes for a second, which is easier to catch than a quick blink.
+4. **Walk away.** About 8 seconds after it last recognized them, the mirror clears back to the
+   clock, and their data is removed from the page. If someone else steps up and is recognized,
+   the mirror clears straight away and asks them to blink. Esc clears it right away.
 
 To be recognized, people need their face saved through sign-up (see
 [`backends/faces`](../../backends/faces/README.md)). The camera's live view fills the screen,
@@ -24,8 +28,9 @@ The data refreshes every 5 minutes while someone stays. If the server can't be r
 data stays up with a small notice. If the camera is blocked, the page says so, with a button to
 try again.
 
-The 3-frame and 8-second rules come from the face-recog mirror script (`scripts/mirror.py`).
-They're `STABLE_MATCHES` and `SESSION_TIMEOUT_MS` at the top of `public/mirror.js`.
+The timings are at the top of `public/mirror.js`: `STABLE_MATCHES` (frames in a row before
+greeting someone), `SESSION_TIMEOUT_MS`, and the `BLINK_...` frame rates. The blink itself is
+judged by the server; see [the backend](../../backends/mirror/README.md).
 
 ## How it's built
 
@@ -33,6 +38,11 @@ They're `STABLE_MATCHES` and `SESSION_TIMEOUT_MS` at the top of `public/mirror.j
   black.
 - **Widgets go where the person put them.** Each widget is positioned from its saved `x`, `y`,
   `w`, `h` (fractions of the screen).
+- **Except on tall screens.** On a phone held upright (narrower than 4:5), saved positions would
+  squeeze every widget into a thin strip, so the page arranges them itself: clock and weather
+  side by side at the top, then the greeting and summary, your reflection in the middle, and
+  everything else as a row of cards along the bottom to swipe through. Turning the phone
+  switches between the two.
 - **Each widget is a bordered card.** Its text scales with the card (CSS container units), so
   any layout and screen size works. The weather widget adds the next 6 hours when its card isn't
   too wide for its height.

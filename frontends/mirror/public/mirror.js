@@ -1,13 +1,19 @@
-// The mirror display. Your face is the key: the page watches the webcam, sends a frame to the
-// server twice a second, and shows the widgets of whoever it recognizes. When they leave, it
-// clears. The camera's live view, flipped like a mirror, is the background. Frames aren't kept.
+// The mirror display. Your face is the key: the page watches the webcam and sends frames to the
+// server, which says who it recognizes. It then asks them to blink (a photo can't), and once the
+// server has seen the blink it shows their widgets. When they leave, it clears. The camera's live
+// view, flipped like a mirror, is the background. Frames aren't kept.
 
 const REFRESH_MS = 5 * 60_000;      // widget data refresh while someone stays
 const IDENTIFY_EVERY_MS = 500;
+// While waiting for a blink, frames go much faster so closed eyes aren't missed between two of
+// them. If no blink comes for a while (say, a photo propped up in front of the camera), ease off.
+const BLINK_EVERY_MS = 100;
+const BLINK_SLOW_EVERY_MS = 250;
+const BLINK_FAST_FOR_MS = 20_000;
+const BLINK_HINT_AFTER_MS = 6_000;   // no blink seen by then: say how to make one easy to see
 const FRAME_WIDTH = 640;            // frames are shrunk to this before sending
 
-// Who's-there rules, from the face-recog mirror script (scripts/mirror.py):
-const STABLE_MATCHES = 3;           // same person this many frames in a row before switching to them
+const STABLE_MATCHES = 2;           // same person this many frames in a row before greeting them
 const SESSION_TIMEOUT_MS = 8_000;   // clear the mirror after this long without recognizing them
 
 const $ = (id) => document.getElementById(id);
@@ -35,9 +41,16 @@ function icon(name) {
 
 class PassExpired extends Error {}
 
-/** One camera frame in, who's there out: { faces, person, pass, expiresAt }. */
-async function identify(frame) {
-  const response = await fetch("/api/identify", { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: frame });
+/**
+ * One camera frame in, who's there out: { faces, person, pass, blink }. `pass` is only there once
+ * the server has seen them blink. Until then `blink` is their progress, to send with the next
+ * frame. Sending the pass we hold keeps it fresh while the same person stays.
+ */
+async function identify(frame, { pass, blink }) {
+  const headers = { "Content-Type": "image/jpeg" };
+  if (pass) headers.Authorization = `Bearer ${pass}`;
+  if (blink) headers["X-Blink"] = blink;
+  const response = await fetch("/api/identify", { method: "POST", headers, body: frame });
   if (response.status === 429) throw new Error("rate_limited");
   if (!response.ok) throw new Error(`identify: ${response.status}`);
   return response.json();
@@ -213,11 +226,10 @@ const renderers = {
 function renderWidget(widget) {
   // The outer box is placed and sized; the inner one holds the content. Text sizes in cqh/cqw
   // only measure against a parent box, which is why the content needs its own element.
+  // The saved position is handed to the stylesheet, which uses it on wide screens only.
   const box = h("div", "widget");
-  box.style.setProperty("left", `${widget.x * 100}%`);
-  box.style.setProperty("top", `${widget.y * 100}%`);
-  box.style.setProperty("width", `${widget.w * 100}%`);
-  box.style.setProperty("height", `${widget.h * 100}%`);
+  box.dataset.key = widget.key;
+  for (const side of ["x", "y", "w", "h"]) box.style.setProperty(`--${side}`, widget[side]);
 
   const content = h("div", `widget-content w-${widget.key}`);
   const render = renderers[widget.key];
@@ -230,6 +242,40 @@ function renderWidget(widget) {
   }
   box.append(content);
   return box;
+}
+
+// --- Laying the widgets out ---
+
+// On a tall screen (a phone held upright) saved positions would squeeze every widget into a thin
+// strip. Instead the page arranges them itself: clock, weather, greeting and summary across the
+// top, your reflection in the middle, and the lists in a row along the bottom to swipe through.
+const tall = window.matchMedia("(max-aspect-ratio: 4/5)");
+const TALL_TOP = ["clock", "weather", "greeting", "summary"];
+
+let shown = null; // the mirror data on screen, kept so it can be laid out again if the screen turns
+
+function layOut(mirror) {
+  shown = mirror;
+  live.length = 0;
+  const widgets = $("widgets");
+  const scrolled = widgets.querySelector(".tall-cards")?.scrollLeft ?? 0;
+  const boxes = mirror.widgets.map(renderWidget);
+
+  widgets.classList.toggle("tall", tall.matches);
+  if (tall.matches) {
+    const top = TALL_TOP.map((key) => boxes.find((box) => box.dataset.key === key)).filter(Boolean);
+    const cards = boxes.filter((box) => !top.includes(box));
+    // Clock and weather share a row; one without the other takes the whole row.
+    const pair = top.filter((box) => box.dataset.key === "clock" || box.dataset.key === "weather");
+    if (pair.length === 1) pair[0].classList.add("alone");
+    const row = h("div", "tall-cards", ...cards);
+    widgets.replaceChildren(h("div", "tall-top", ...top), row);
+    row.scrollLeft = scrolled;
+  } else {
+    widgets.replaceChildren(...boxes);
+  }
+  tick();
+  fitAll();
 }
 
 // --- Fitting content to its box ---
@@ -326,49 +372,52 @@ function idleClock() {
   tick();
 }
 
-function setPrompt(text, showRetry = false) {
+/** What the waiting screen says: an optional big line (a greeting) and the small prompt under it. */
+function setPrompt(text, { hello = "", retry = false } = {}) {
+  $("idle-hello").textContent = hello;
+  $("idle-hello").hidden = !hello;
   $("idle-prompt").textContent = text;
-  $("camera-retry").hidden = !showRetry;
+  $("camera-retry").hidden = !retry;
 }
 
 // --- Who's at the mirror ---
 
 const session = {
-  person: null,       // { id, name } of whoever the mirror is showing
-  pass: null,         // proof from the server that it recognized them; needed to load their data
-  pending: null,      // someone recognized but not yet confirmed
-  streak: 0,
+  person: null,       // { id, name } of whoever the mirror is open for
+  pass: null,         // proof from the server that it recognized them and saw them blink
+  waiting: null,      // someone recognized who hasn't blinked yet
+  waitingSince: 0,
+  streak: 0,          // frames in a row that `waiting` was recognized
+  blink: null,        // their progress towards a blink; goes back to the server with the next frame
   lastFace: 0,
   lastConfirmed: 0,
 };
 let refreshTimer = null;
 
-/** Applies one recognition result. Ported from update_session in scripts/mirror.py. */
+/** Applies one answer from the server. */
 function update(result, now) {
   const recognized = result.person;
   if (result.faces > 0) session.lastFace = now;
+  session.blink = result.blink ?? null;
 
-  // Still the same person: keep them, and keep the newest pass.
-  if (session.person && recognized?.id === session.person.id) {
-    session.pass = result.pass;
-    session.lastConfirmed = now;
-    session.pending = null;
-    session.streak = 0;
+  // They've blinked, or the mirror is already open for them: (keep) showing their mirror.
+  if (recognized && result.pass) {
+    const arrived = session.person?.id !== recognized.id;
+    Object.assign(session, { person: recognized, pass: result.pass, lastConfirmed: now, waiting: null, streak: 0 });
+    if (arrived) showPerson();
     return;
   }
 
+  // Recognized, but the server hasn't seen them blink.
   if (recognized) {
-    if (session.pending?.id === recognized.id) session.streak += 1;
-    else Object.assign(session, { pending: recognized, streak: 1 });
-    if (session.streak >= STABLE_MATCHES) {
-      Object.assign(session, { person: recognized, pass: result.pass, lastConfirmed: now, pending: null, streak: 0 });
-      showPerson();
-    }
+    if (session.waiting?.id === recognized.id) session.streak += 1;
+    else Object.assign(session, { waiting: recognized, waitingSince: now, streak: 1 });
+    // If the mirror is open, it's for someone else (or their pass ran out): close it for the newcomer.
+    if (session.streak >= STABLE_MATCHES && session.person) closeMirror();
     return;
   }
 
-  session.pending = null;
-  session.streak = 0;
+  Object.assign(session, { waiting: null, streak: 0 });
   const gone = result.faces > 0
     ? now - session.lastConfirmed > SESSION_TIMEOUT_MS   // someone's there, but not them
     : now - session.lastFace > SESSION_TIMEOUT_MS;       // nobody's there
@@ -382,14 +431,32 @@ async function showPerson() {
   refreshTimer = setInterval(refresh, REFRESH_MS);
 }
 
-function showNobody() {
+/** Takes whoever's mirror is open off the screen (and out of the page) and shows the waiting screen. */
+function closeMirror() {
   Object.assign(session, { person: null, pass: null });
   clearInterval(refreshTimer);
-  // Their data leaves the screen (and the page) as soon as they do.
+  shown = null;
   $("widgets").replaceChildren();
   idleClock();
-  setPrompt("Step up to the mirror");
   show("idle");
+}
+
+function showNobody() {
+  closeMirror();
+  Object.assign(session, { waiting: null, streak: 0, blink: null });
+  showWaitingPrompt();
+}
+
+/** The waiting screen's words: greets someone it recognizes and asks them to blink. */
+function showWaitingPrompt() {
+  if (session.waiting && session.streak >= STABLE_MATCHES) {
+    // A quick blink can fall between two frames. A slow one can't.
+    const slow = performance.now() - session.waitingSince > BLINK_HINT_AFTER_MS;
+    setPrompt(slow ? "Close your eyes for a second, then open them" : "Blink to open your mirror",
+      { hello: `Hi, ${session.waiting.name.split(" ")[0]}` });
+  } else {
+    setPrompt("Step up to the mirror");
+  }
 }
 
 async function refresh() {
@@ -398,11 +465,8 @@ async function refresh() {
   try {
     const mirror = await loadMirror(session.pass);
     if (session.person?.id !== person.id) return; // they left while it loaded
-    live.length = 0;
-    $("widgets").replaceChildren(...mirror.widgets.map(renderWidget));
+    layOut(mirror);
     $("offline").hidden = true;
-    tick();
-    fitAll();
   } catch (error) {
     // An expired pass gets replaced on the next recognition; anything else, keep the old data up.
     if (!(error instanceof PassExpired)) $("offline").hidden = false;
@@ -425,7 +489,7 @@ async function startCamera() {
     return true;
   } catch (error) {
     const blocked = error?.name === "NotAllowedError";
-    setPrompt(blocked ? "The mirror needs camera access to recognize you." : "No camera found.", blocked);
+    setPrompt(blocked ? "The mirror needs camera access to recognize you." : "No camera found.", { retry: blocked });
     return false;
   }
 }
@@ -447,22 +511,31 @@ function startWatching() {
   watch();
 }
 
+/** How long to leave between frames right now. */
+function framePause(now) {
+  if (!session.waiting) return IDENTIFY_EVERY_MS;
+  return now - session.waitingSince < BLINK_FAST_FOR_MS ? BLINK_EVERY_MS : BLINK_SLOW_EVERY_MS;
+}
+
 /** Sends a frame, applies the answer, and schedules the next one. Only one request at a time. */
 async function watch() {
-  let delay = IDENTIFY_EVERY_MS;
+  const started = performance.now();
+  let failed = false;
   if (!document.hidden && video.videoWidth) {
     try {
       const frame = await captureFrame();
-      update(await identify(frame), performance.now());
-      if (!session.person) setPrompt("Step up to the mirror");
+      update(await identify(frame, session), performance.now());
+      if (!session.person) showWaitingPrompt();
     } catch (error) {
-      delay = 2000;
-      if (error.message !== "rate_limited" && !session.person) setPrompt("Can't reach the server…");
+      failed = true;
       // Treat a failed check like an empty frame, so the mirror still clears when it should.
       update({ faces: 0, person: null }, performance.now());
+      if (error.message !== "rate_limited" && !session.person) setPrompt("Can't reach the server…");
     }
   }
-  setTimeout(watch, delay);
+  // Frames are timed from when the last one started, so a slow answer doesn't slow the pace further.
+  const now = performance.now();
+  setTimeout(watch, failed ? 2000 : Math.max(0, framePause(now) - (now - started)));
 }
 
 // --- Start ---
@@ -474,6 +547,10 @@ async function start() {
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(fitAll, 150);
+  });
+  // Turning the screen switches between the saved layout and the tall one.
+  tall.addEventListener("change", () => {
+    if (shown) layOut(shown);
   });
   // Esc clears the mirror right away (it comes back if they're still there).
   document.addEventListener("keydown", (event) => {
